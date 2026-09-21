@@ -1,89 +1,170 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Volume2, FileText, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Play, Pause, RotateCcw, Volume2, UserCheck } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface AudioPlayerProps {
   audioUrl?: string;
   transcriptText: string;
 }
 
+interface DialogueTurn {
+  speaker: 'Receptionist' | 'Student';
+  text: string;
+}
+
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [duration] = useState(48); // 48 seconds representative dialogue
-  const [showTranscript, setShowTranscript] = useState(false);
-  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const [currentSpeaker, setCurrentSpeaker] = useState<'Receptionist' | 'Student' | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
+  const isPlayingRef = useRef(false);
+  const currentTurnIndexRef = useRef(0);
+  const totalDuration = 42; // simulated seconds for waveform timer
+
+  // Parse conversation turns from dialogue
+  const dialogueTurns: DialogueTurn[] = useMemo(() => {
+    return transcriptText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        if (line.toLowerCase().startsWith('receptionist:')) {
+          return {
+            speaker: 'Receptionist',
+            text: line.replace(/^receptionist:\s*/i, '').trim(),
+          };
+        }
+        return {
+          speaker: 'Student',
+          text: line.replace(/^student:\s*/i, '').trim(),
+        };
+      });
+  }, [transcriptText]);
+
+  // Load available system voices
   useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+
+    const loadVoices = () => {
+      const available = window.speechSynthesis.getVoices();
+      if (available.length > 0) {
+        setVoices(available);
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
     return () => {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
     };
   }, []);
+
+  // Choose distinct voices for Receptionist vs Student
+  const { receptionistVoice, studentVoice } = useMemo(() => {
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    const pool = enVoices.length > 0 ? enVoices : voices;
+
+    // Search for female / male profiles in voice names
+    const femaleVoice = pool.find((v) =>
+      /female|zira|samantha|victoria|karen|jenny|moira|fiona/i.test(v.name)
+    );
+    const maleVoice = pool.find((v) =>
+      /male|david|george|daniel|guy|oliver|rishi|alex/i.test(v.name) && v !== femaleVoice
+    );
+
+    return {
+      receptionistVoice: femaleVoice || pool[0] || null,
+      studentVoice: maleVoice || (pool.length > 1 ? pool[1] : pool[0]) || null,
+    };
+  }, [voices]);
+
+  const playTurn = (index: number) => {
+    if (!isPlayingRef.current) return;
+
+    if (index >= dialogueTurns.length) {
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setProgress(100);
+      setCurrentSpeaker(null);
+      currentTurnIndexRef.current = 0;
+      return;
+    }
+
+    currentTurnIndexRef.current = index;
+    const turn = dialogueTurns[index];
+    setCurrentSpeaker(turn.speaker);
+    setProgress(Math.round((index / dialogueTurns.length) * 100));
+
+    if (!('speechSynthesis' in window)) return;
+
+    const utterance = new SpeechSynthesisUtterance(turn.text);
+
+    if (turn.speaker === 'Receptionist') {
+      if (receptionistVoice) utterance.voice = receptionistVoice;
+      utterance.pitch = 1.18; // distinctly higher natural pitch
+      utterance.rate = 0.95;
+    } else {
+      if (studentVoice) utterance.voice = studentVoice;
+      utterance.pitch = 0.86; // distinctly deeper natural pitch
+      utterance.rate = 1.02;
+    }
+
+    utterance.onend = () => {
+      if (isPlayingRef.current) {
+        // Short natural breathing pause between turns (350ms)
+        setTimeout(() => {
+          if (isPlayingRef.current) {
+            playTurn(index + 1);
+          }
+        }, 350);
+      }
+    };
+
+    utterance.onerror = (e) => {
+      console.warn('Speech utterance ended/errored:', e);
+      if (isPlayingRef.current) {
+        playTurn(index + 1);
+      }
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handlePlayToggle = () => {
     if (isPlaying) {
       // Pause
-      if (window.speechSynthesis) {
-        window.speechSynthesis.pause();
-      }
+      isPlayingRef.current = false;
       setIsPlaying(false);
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     } else {
       // Play
+      isPlayingRef.current = true;
       setIsPlaying(true);
-
-      // Web Speech synthesis for crisp real speech in all environments
-      if ('speechSynthesis' in window) {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        } else {
-          window.speechSynthesis.cancel();
-          const cleanText = transcriptText.replace(/(Receptionist:|Student:)/g, '');
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          utterance.rate = 0.95; // realistic academic pace
-          utterance.pitch = 1.0;
-          utterance.onend = () => {
-            setIsPlaying(false);
-            setProgress(100);
-            if (timerRef.current) clearInterval(timerRef.current);
-          };
-          speechRef.current = utterance;
-          window.speechSynthesis.speak(utterance);
-        }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
       }
-
-      // Progress bar animation
-      const interval = 200;
-      const totalSteps = (duration * 1000) / interval;
-      timerRef.current = window.setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(timerRef.current!);
-            setIsPlaying(false);
-            return 100;
-          }
-          return prev + 100 / totalSteps;
-        });
-      }, interval);
+      playTurn(currentTurnIndexRef.current);
     }
   };
 
   const handleRestart = () => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    currentTurnIndexRef.current = 0;
+    setProgress(0);
+    setCurrentSpeaker(null);
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    if (timerRef.current) clearInterval(timerRef.current);
-    setProgress(0);
-    setIsPlaying(false);
   };
 
-  const currentSeconds = Math.floor((progress / 100) * duration);
+  const currentSeconds = Math.floor((progress / 100) * totalDuration);
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -102,18 +183,24 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
               Audio Recording: University Study Suites
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Listen carefully to the conversation between the receptionist and the student.
+              Listen carefully to the two speakers (Receptionist & Student) to answer the questions below.
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowTranscript(!showTranscript)}
-          className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 cursor-pointer px-2.5 py-1.5 rounded-lg hover:bg-indigo-500/10 transition-colors"
-        >
-          <FileText className="w-3.5 h-3.5" />
-          {showTranscript ? 'Hide Transcript' : 'Transcript'}
-        </button>
+        {/* Current Speaker Indicator Badge */}
+        {currentSpeaker && isPlaying && (
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold animate-pulse transition-colors ${
+              currentSpeaker === 'Receptionist'
+                ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
+                : 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Speaking: {currentSpeaker}</span>
+          </div>
+        )}
       </div>
 
       {/* Waveform & Playback Controls */}
@@ -122,6 +209,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
           whileTap={{ scale: 0.94 }}
           onClick={handlePlayToggle}
           className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 cursor-pointer transition-colors shrink-0"
+          aria-label={isPlaying ? 'Pause dialogue' : 'Play dialogue'}
         >
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
         </motion.button>
@@ -150,7 +238,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
                 transition={{ duration: 0.15 }}
                 className={`w-1 rounded-full transition-colors ${
                   isPassed
-                    ? 'bg-cyan-500 dark:bg-cyan-400'
+                    ? currentSpeaker === 'Receptionist'
+                      ? 'bg-cyan-500 dark:bg-cyan-400'
+                      : 'bg-indigo-500 dark:bg-indigo-400'
                     : 'bg-slate-200 dark:bg-slate-700/60'
                 }`}
               />
@@ -159,28 +249,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
         </div>
 
         <div className="text-xs font-mono text-slate-500 dark:text-slate-400 font-tabular shrink-0">
-          {formatTime(currentSeconds)} / {formatTime(duration)}
+          {formatTime(currentSeconds)} / {formatTime(totalDuration)}
         </div>
       </div>
-
-      {/* Transcript Drawer */}
-      <AnimatePresence>
-        {showTranscript && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t border-slate-200/40 dark:border-white/5 pt-3"
-          >
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-mono whitespace-pre-line border border-slate-200/50 dark:border-white/5">
-              <div className="flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400 font-semibold mb-2">
-                <Sparkles className="w-3.5 h-3.5" /> Reference Dialogue Transcript:
-              </div>
-              {transcriptText}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
