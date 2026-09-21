@@ -1,0 +1,15 @@
+{
+  "name": "matalabs-english-test",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan,magenta\" \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:frontend": "cd frontend && bun run dev",
+    "dev:backend": "cd backend && go run main.go",
+    "build:frontend": "cd frontend && bun run build",
+    "build:backend": "cd backend && go build -o server.exe main.go"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
