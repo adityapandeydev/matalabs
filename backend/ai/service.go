@@ -159,7 +159,7 @@ Return ONLY a valid JSON object matching this schema exactly:
 }
 
 func (s *AIService) callGeminiText(systemPrompt, userContent string) (*models.WritingEvaluation, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%s", s.GeminiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=%s", s.GeminiKey)
 
 	payload := map[string]interface{}{
 		"systemInstruction": map[string]interface{}{
@@ -229,7 +229,7 @@ func (s *AIService) callGroqText(systemPrompt, userContent string) (*models.Writ
 	url := "https://api.groq.com/openai/v1/chat/completions"
 
 	payload := map[string]interface{}{
-		"model": "llama-3.3-70b-versatile",
+		"model": "openai/gpt-oss-120b",
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userContent},
@@ -330,7 +330,7 @@ func (s *AIService) EvaluateSpeaking(audioData []byte, mimeType string, question
 }
 
 func (s *AIService) callGeminiAudio(audioData []byte, mimeType string, questions []string) (*models.SpeakingEvaluation, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%s", s.GeminiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=%s", s.GeminiKey)
 
 	encodedAudio := base64.StdEncoding.EncodeToString(audioData)
 	if mimeType == "" {
@@ -506,7 +506,7 @@ Return ONLY valid JSON matching:
 
 	url := "https://api.groq.com/openai/v1/chat/completions"
 	payload := map[string]interface{}{
-		"model": "llama-3.3-70b-versatile",
+		"model": "openai/gpt-oss-120b",
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userContent},

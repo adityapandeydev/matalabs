@@ -1,122 +1,359 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import type { TestStage, TestContent, TestResult, AuthUser } from './types';
+import { fetchTestContent, loginWithGoogle, submitFullTest } from './services/api';
 
-function App() {
-  const [count, setCount] = useState(0)
+import { ThemeToggle } from './components/ThemeToggle';
+import { WelcomeView } from './views/WelcomeView';
+import { ListeningView } from './views/ListeningView';
+import { ReadingView } from './views/ReadingView';
+import { PauseView } from './views/PauseView';
+import { AuthGateView } from './views/AuthGateView';
+import { WritingView } from './views/WritingView';
+import { SpeakingView } from './views/SpeakingView';
+import { PreparingView } from './views/PreparingView';
+import { ResultsView } from './views/ResultsView';
+
+import { AnimatePresence } from 'framer-motion';
+import { Headphones, BookOpen, PenTool, Mic, Award, User } from 'lucide-react';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+export const App: React.FC = () => {
+  // Theme state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const saved = localStorage.getItem('matalabs_theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('matalabs_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('matalabs_theme', 'light');
+    }
+  }, [isDark]);
+
+  // Test Flow States
+  const [stage, setStage] = useState<TestStage>('welcome');
+  const [testContent, setTestContent] = useState<TestContent | null>(null);
+  const [loadingContent, setLoadingContent] = useState(true);
+
+  // Candidate Data
+  const [candidateName, setCandidateName] = useState('');
+  const [candidateContact, setCandidateContact] = useState('');
+  const [targetScore, setTargetScore] = useState(7.0);
+
+  // Submissions Data
+  const [listeningAnswers, setListeningAnswers] = useState<Record<string, number>>({});
+  const [readingAnswers, setReadingAnswers] = useState<Record<string, number>>({});
+  const [essayText, setEssayText] = useState('');
+  const [finalResult, setFinalResult] = useState<TestResult | null>(null);
+
+  // Auth Data
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    const saved = localStorage.getItem('matalabs_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    return localStorage.getItem('matalabs_token');
+  });
+
+  // Load Test Content from Go Backend
+  useEffect(() => {
+    fetchTestContent()
+      .then((data) => {
+        setTestContent(data);
+        setLoadingContent(false);
+      })
+      .catch((err) => {
+        console.error('Failed to load test content:', err);
+        setLoadingContent(false);
+      });
+  }, []);
+
+  // 1. Welcome Complete
+  const handleStartWelcome = (data: { name: string; contact: string; targetScore: number }) => {
+    setCandidateName(data.name);
+    setCandidateContact(data.contact);
+    setTargetScore(data.targetScore);
+    setStage('listening');
+  };
+
+  // 2. Listening Complete -> Move to Pause 1 (no score shown)
+  const handleListeningSubmit = (answers: Record<string, number>) => {
+    setListeningAnswers(answers);
+    setStage('pause_reading');
+  };
+
+  // 3. Pause 1 Complete -> Move to Reading
+  const handlePauseReadingContinue = () => {
+    setStage('reading');
+  };
+
+  // 4. Reading Complete -> Check Google Auth Gate
+  const handleReadingSubmit = (answers: Record<string, number>) => {
+    setReadingAnswers(answers);
+    // If user is already authenticated with Google, advance directly to Writing!
+    if (authToken && authUser) {
+      setStage('writing');
+    } else {
+      setStage('auth_gate');
+    }
+  };
+
+  // 5. Google Sign-In Success -> Advances immediately to Writing
+  const handleGoogleAuthSuccess = async (credential: string) => {
+    const authData = await loginWithGoogle(credential);
+    setAuthToken(authData.token);
+    setAuthUser(authData.user);
+    localStorage.setItem('matalabs_token', authData.token);
+    localStorage.setItem('matalabs_user', JSON.stringify(authData.user));
+    setStage('writing');
+  };
+
+  // 6. Writing Complete -> Move to Pause 2 (no score shown)
+  const handleWritingSubmit = (text: string) => {
+    // Security check: protect writing from unauthenticated visitors
+    if (!authToken) {
+      setStage('auth_gate');
+      return;
+    }
+    setEssayText(text);
+    setStage('pause_speaking');
+  };
+
+  // 7. Pause 2 Complete -> Move to Speaking
+  const handlePauseSpeakingContinue = () => {
+    if (!authToken) {
+      setStage('auth_gate');
+      return;
+    }
+    setStage('speaking');
+  };
+
+  // 8. Speaking Complete -> Transition to Preparing -> Dispatch Full AI Evaluation
+  const handleSpeakingComplete = async (audioBlob: Blob) => {
+    if (!authToken) {
+      setStage('auth_gate');
+      return;
+    }
+
+    setStage('preparing');
+
+    try {
+      const payload = {
+        target_score: targetScore,
+        candidate_name: candidateName || (authUser ? authUser.name : 'Candidate'),
+        candidate_contact: candidateContact || (authUser ? authUser.email : ''),
+        listening_answers: listeningAnswers,
+        reading_answers: readingAnswers,
+        essay_text: essayText,
+      };
+
+      const result = await submitFullTest(payload, audioBlob, authToken);
+      setFinalResult(result);
+
+      // Short aesthetic pause on preparing results
+      setTimeout(() => {
+        setStage('results');
+      }, 1500);
+    } catch (err) {
+      console.error('Submission evaluation error:', err);
+      // Fallback display
+      setTimeout(() => {
+        if (finalResult) {
+          setStage('results');
+        } else {
+          alert('Evaluation completed with fallback report.');
+          setStage('results');
+        }
+      }, 2000);
+    }
+  };
+
+  // Restart / Retake
+  const handleRetake = () => {
+    setListeningAnswers({});
+    setReadingAnswers({});
+    setEssayText('');
+    setFinalResult(null);
+    setStage('welcome');
+  };
+
+  // Stage progress navigation dots
+  const stagePills = [
+    { key: 'listening', label: 'Listening', icon: Headphones },
+    { key: 'reading', label: 'Reading', icon: BookOpen },
+    { key: 'writing', label: 'Writing', icon: PenTool },
+    { key: 'speaking', label: 'Speaking', icon: Mic },
+    { key: 'results', label: 'Results', icon: Award },
+  ];
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <div className={`min-h-screen flex flex-col relative transition-colors duration-400 ${isDark ? 'mesh-glow-dark' : 'mesh-glow-light'}`}>
+        {/* Navigation Bar */}
+        <header className="sticky top-0 z-50 border-b border-slate-200/50 dark:border-white/5 glass-panel">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-extrabold shadow-md shadow-indigo-500/20">
+                M
+              </div>
+              <div>
+                <div className="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                  Matalabs <span className="font-normal text-xs text-indigo-500">English 4-Skill</span>
+                </div>
+                <div className="text-[10px] text-slate-400">Automated Multimodal Assessment</div>
+              </div>
+            </div>
 
-      <div className="ticks"></div>
+            {/* Stage Progress Pills (Shown during test) */}
+            {stage !== 'welcome' && stage !== 'preparing' && (
+              <div className="hidden md:flex items-center gap-2">
+                {stagePills.map((pill) => {
+                  const Icon = pill.icon;
+                  const isActive = stage.includes(pill.key);
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+                  return (
+                    <div
+                      key={pill.key}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{pill.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
-}
+            {/* Right User & Theme Controls */}
+            <div className="flex items-center gap-3">
+              {authUser && (
+                <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 glass-panel px-3 py-1.5 rounded-full">
+                  {authUser.picture ? (
+                    <img src={authUser.picture} alt={authUser.name} className="w-5 h-5 rounded-full" />
+                  ) : (
+                    <User className="w-4 h-4 text-indigo-500" />
+                  )}
+                  <span className="truncate max-w-[120px]">{authUser.name}</span>
+                </div>
+              )}
 
-export default App
+              <ThemeToggle isDark={isDark} onToggle={() => setIsDark(!isDark)} />
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Stage View */}
+        <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 flex flex-col justify-center">
+          {loadingContent ? (
+            <div className="text-center py-20 space-y-3">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                Initializing 4-skill diagnostic environment...
+              </p>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              {stage === 'welcome' && (
+                <WelcomeView key="welcome" onStart={handleStartWelcome} />
+              )}
+
+              {stage === 'listening' && testContent && (
+                <ListeningView
+                  key="listening"
+                  audioUrl={testContent.listening_audio_url}
+                  transcriptText={testContent.listening_audio_text}
+                  questions={testContent.listening_questions}
+                  onSubmit={handleListeningSubmit}
+                />
+              )}
+
+              {stage === 'pause_reading' && (
+                <PauseView
+                  key="pause_reading"
+                  completedSection="Listening"
+                  nextSection="Reading"
+                  onContinue={handlePauseReadingContinue}
+                />
+              )}
+
+              {stage === 'reading' && testContent && (
+                <ReadingView
+                  key="reading"
+                  title={testContent.reading_title}
+                  passage={testContent.reading_passage}
+                  questions={testContent.reading_questions}
+                  onSubmit={handleReadingSubmit}
+                />
+              )}
+
+              {stage === 'auth_gate' && (
+                <AuthGateView
+                  key="auth_gate"
+                  candidateName={candidateName}
+                  onSuccess={handleGoogleAuthSuccess}
+                />
+              )}
+
+              {stage === 'writing' && testContent && (
+                <WritingView
+                  key="writing"
+                  prompt={testContent.writing_prompt}
+                  minWords={testContent.writing_min_words}
+                  onSubmit={handleWritingSubmit}
+                />
+              )}
+
+              {stage === 'pause_speaking' && (
+                <PauseView
+                  key="pause_speaking"
+                  completedSection="Writing"
+                  nextSection="Speaking"
+                  onContinue={handlePauseSpeakingContinue}
+                />
+              )}
+
+              {stage === 'speaking' && testContent && (
+                <SpeakingView
+                  key="speaking"
+                  questions={testContent.speaking_questions}
+                  isDark={isDark}
+                  onComplete={handleSpeakingComplete}
+                />
+              )}
+
+              {stage === 'preparing' && (
+                <PreparingView key="preparing" isDark={isDark} />
+              )}
+
+              {stage === 'results' && finalResult && (
+                <ResultsView
+                  key="results"
+                  result={finalResult}
+                  onRetake={handleRetake}
+                />
+              )}
+            </AnimatePresence>
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-200/40 dark:border-white/5 py-4 text-center text-xs text-slate-400 dark:text-slate-500">
+          <p>© 2026 Matalabs English Proficiency Evaluation. Fast, automated, non-commercial diagnostic.</p>
+        </footer>
+      </div>
+    </GoogleOAuthProvider>
+  );
+};
+
+export default App;
