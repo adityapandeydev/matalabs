@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build statically linked binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server .
+RUN CGO_ENABLED=0 GOOS=linux go build -p 1 -ldflags="-w -s" -o server .
 
 # Final minimal production image (~20MB)
 FROM alpine:3.21
