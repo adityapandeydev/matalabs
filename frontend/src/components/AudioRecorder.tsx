@@ -213,7 +213,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 </span>
               ) : (
                 <span className="text-slate-400 dark:text-slate-500">
-                  Say something like "Hello, test 1 2 3" into your microphone...
+                  Speak a short greeting into your microphone to verify...
                 </span>
               )}
             </div>
