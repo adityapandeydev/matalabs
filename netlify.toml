@@ -6,6 +6,8 @@
 [build.environment]
   SECRETS_SCAN_ENABLED = "false"
   SECRETS_SCAN_OMIT_KEYS = "VITE_API_URL,VITE_GOOGLE_CLIENT_ID"
+  VITE_API_URL = "https://d1tiedalmd5vcf.cloudfront.net"
+  VITE_GOOGLE_CLIENT_ID = "725847973851-mk6sldpoj2isr8u597t3bpqn1kkj14k4.apps.googleusercontent.com"
 
 [[redirects]]
   from = "/*"
