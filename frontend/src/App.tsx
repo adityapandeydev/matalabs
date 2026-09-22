@@ -60,7 +60,7 @@ export const App: React.FC = () => {
   const [readingAnswers, setReadingAnswers] = useState<Record<string, number>>({});
   const [essayText, setEssayText] = useState('');
   const [finalResult, setFinalResult] = useState<TestResult | null>(null);
-  const [pendingAudio, setPendingAudio] = useState<Blob | null>(null);
+  const [pendingAudio, setPendingAudio] = useState<{ q1: Blob | null; q2: Blob | null } | null>(null);
 
   // Load Test Content from Backend
   useEffect(() => {
@@ -122,7 +122,12 @@ export const App: React.FC = () => {
           reading_answers: readingAnswers,
           essay_text: essayText,
         };
-        const result = await submitFullTest(payload, pendingAudio, authData.token);
+        const result = await submitFullTest(
+          payload,
+          pendingAudio ? pendingAudio.q1 : null,
+          authData.token,
+          pendingAudio ? pendingAudio.q2 : null
+        );
         setFinalResult(result);
         setPendingAudio(null);
         setTimeout(() => {
@@ -161,9 +166,9 @@ export const App: React.FC = () => {
   };
 
   // 8. Speaking Complete -> Transition to Preparing -> Dispatch Full AI Evaluation
-  const handleSpeakingComplete = async (audioBlob: Blob) => {
+  const handleSpeakingComplete = async (audioBlob: Blob, audioBlob2?: Blob) => {
     if (!authToken) {
-      setPendingAudio(audioBlob);
+      setPendingAudio({ q1: audioBlob, q2: audioBlob2 || null });
       setStage('auth_gate');
       return;
     }
@@ -180,7 +185,7 @@ export const App: React.FC = () => {
         essay_text: essayText,
       };
 
-      const result = await submitFullTest(payload, audioBlob, authToken);
+      const result = await submitFullTest(payload, audioBlob, authToken, audioBlob2);
       setFinalResult(result);
       setPendingAudio(null);
 
@@ -198,7 +203,7 @@ export const App: React.FC = () => {
         localStorage.removeItem('matalabs_user');
         setAuthToken(null);
         setAuthUser(null);
-        setPendingAudio(audioBlob);
+        setPendingAudio({ q1: audioBlob, q2: audioBlob2 || null });
         setStage('auth_gate');
         return;
       }

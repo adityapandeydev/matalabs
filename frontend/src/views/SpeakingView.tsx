@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 interface SpeakingViewProps {
   questions: string[];
   isDark: boolean;
-  onComplete: (audioBlob: Blob) => void;
+  onComplete: (audioBlob: Blob, audioBlob2?: Blob) => void;
 }
 
 export const SpeakingView: React.FC<SpeakingViewProps> = ({

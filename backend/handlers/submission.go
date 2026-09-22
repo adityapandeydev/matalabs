@@ -58,18 +58,35 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Read audio file if provided
-	var audioBytes []byte
+	// Read audio file(s) - support multi-question audio (audio1 & audio2) or single audio
+	var audio1Bytes, audio2Bytes []byte
 	var mimeType string
-	file, fileHeader, err := r.FormFile("audio")
-	if err == nil && file != nil {
-		defer file.Close()
-		audioBytes, _ = io.ReadAll(file)
-		mimeType = fileHeader.Header.Get("Content-Type")
+
+	if f1, h1, err := r.FormFile("audio1"); err == nil && f1 != nil {
+		defer f1.Close()
+		audio1Bytes, _ = io.ReadAll(f1)
+		mimeType = h1.Header.Get("Content-Type")
+	}
+	if f2, h2, err := r.FormFile("audio2"); err == nil && f2 != nil {
+		defer f2.Close()
+		audio2Bytes, _ = io.ReadAll(f2)
+		if mimeType == "" {
+			mimeType = h2.Header.Get("Content-Type")
+		}
+	}
+	// Fallback to legacy single audio if audio1 wasn't sent
+	if len(audio1Bytes) == 0 {
+		if file, fileHeader, err := r.FormFile("audio"); err == nil && file != nil {
+			defer file.Close()
+			audio1Bytes, _ = io.ReadAll(file)
+			if mimeType == "" {
+				mimeType = fileHeader.Header.Get("Content-Type")
+			}
+		}
 	}
 
-	log.Printf("[Submission] User %s submitted test. Essay: %d chars, Audio: %d bytes (%s)",
-		userID, len(sub.EssayText), len(audioBytes), mimeType)
+	log.Printf("[Submission] User %s submitted test. Essay: %d chars, Audio1: %d bytes, Audio2: %d bytes (%s)",
+		userID, len(sub.EssayText), len(audio1Bytes), len(audio2Bytes), mimeType)
 
 	// 1. Calculate deterministic objective scores
 	listeningScore := CalculateObjectiveScore(sub.ListeningAnswers, ActiveTestContent.ListeningQuestions)
@@ -92,11 +109,11 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 		log.Printf("[Submission] Writing evaluation completed in %v (err: %v)", time.Since(start), writingErr)
 	}()
 
-	// Evaluate Speaking
+	// Evaluate Speaking (Supports Dual Question Audio)
 	go func() {
 		defer wg.Done()
 		start := time.Now()
-		speakingEval, speakingErr = h.AIService.EvaluateSpeaking(audioBytes, mimeType, ActiveTestContent.SpeakingQuestions)
+		speakingEval, speakingErr = h.AIService.EvaluateSpeakingDual(audio1Bytes, audio2Bytes, mimeType, ActiveTestContent.SpeakingQuestions)
 		log.Printf("[Submission] Speaking evaluation completed in %v (err: %v)", time.Since(start), speakingErr)
 	}()
 

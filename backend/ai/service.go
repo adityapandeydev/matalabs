@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"matalabs-backend/models"
@@ -339,6 +340,64 @@ func (s *AIService) callGroqText(systemPrompt, userContent string) (*models.Writ
 	}
 
 	return &eval, nil
+}
+
+// EvaluateSpeakingDual transcribes and scores candidate responses for both speaking questions
+func (s *AIService) EvaluateSpeakingDual(audio1, audio2 []byte, mimeType string, questions []string) (*models.SpeakingEvaluation, error) {
+	// If only one audio was provided, evaluate as single
+	if len(audio2) < 500 {
+		return s.EvaluateSpeaking(audio1, mimeType, questions)
+	}
+	if len(audio1) < 500 {
+		return s.EvaluateSpeaking(audio2, mimeType, questions)
+	}
+
+	// 1. Try Groq Whisper in parallel for ultra-fast dual transcription
+	if s.GroqKey != "" {
+		var t1, t2 string
+		var err1, err2 error
+		var wg sync.WaitGroup
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			t1, err1 = s.transcribeWithGroqWhisper(audio1, mimeType)
+		}()
+		go func() {
+			defer wg.Done()
+			t2, err2 = s.transcribeWithGroqWhisper(audio2, mimeType)
+		}()
+		wg.Wait()
+
+		cleanT1 := strings.TrimSpace(t1)
+		cleanT2 := strings.TrimSpace(t2)
+
+		if (err1 == nil || err2 == nil) && (len(cleanT1) > 0 || len(cleanT2) > 0) {
+			q1Text := "Question 1"
+			q2Text := "Question 2"
+			if len(questions) > 0 {
+				q1Text = questions[0]
+			}
+			if len(questions) > 1 {
+				q2Text = questions[1]
+			}
+
+			fullTranscript := fmt.Sprintf("Response to Question 1 (\"%s\"):\n\"%s\"\n\nResponse to Question 2 (\"%s\"):\n\"%s\"",
+				q1Text, cleanT1, q2Text, cleanT2)
+
+			eval, err := s.scoreTranscriptWithGroq(fullTranscript, questions)
+			if err == nil {
+				eval.Transcript = fullTranscript
+				eval.Score = RoundToHalfStep(eval.Score)
+				eval.AIModelUsed = "whisper-large-v3-turbo + groq/gpt-oss-120b"
+				return eval, nil
+			}
+			log.Printf("[AI] Groq dual transcript scoring error: %v", err)
+		}
+	}
+
+	// Fallback to single audio evaluation using audio1
+	return s.EvaluateSpeaking(audio1, mimeType, questions)
 }
 
 // EvaluateSpeaking transcribes and scores the candidate's spoken audio

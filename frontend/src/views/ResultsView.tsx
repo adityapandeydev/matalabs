@@ -531,9 +531,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5" /> Spoken Transcript (What was heard):
           </div>
-          <p className="text-xs sm:text-sm italic text-slate-800 dark:text-slate-200 leading-relaxed font-serif">
-            "{result.speaking_details.transcript || '[No transcript available]'}"
-          </p>
+          <div className="text-xs sm:text-sm italic text-slate-800 dark:text-slate-200 leading-relaxed font-serif whitespace-pre-line">
+            {result.speaking_details.transcript ? `"${result.speaking_details.transcript}"` : '[No transcript available]'}
+          </div>
         </div>
 
         {/* Speaking Feedback Criteria */}

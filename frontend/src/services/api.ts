@@ -38,12 +38,17 @@ export async function submitFullTest(
     essay_text: string;
   },
   audioBlob: Blob | null,
-  token: string
+  token: string,
+  audioBlob2?: Blob | null
 ): Promise<TestResult> {
   const formData = new FormData();
   formData.append('data', JSON.stringify(payload));
   if (audioBlob) {
-    formData.append('audio', audioBlob, 'speaking.webm');
+    formData.append('audio1', audioBlob, 'speaking_q1.webm');
+    formData.append('audio', audioBlob, 'speaking.webm'); // legacy fallback
+  }
+  if (audioBlob2) {
+    formData.append('audio2', audioBlob2, 'speaking_q2.webm');
   }
 
   const res = await fetch(`${API_BASE}/api/test/submit`, {
