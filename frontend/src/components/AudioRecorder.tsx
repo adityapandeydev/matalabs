@@ -25,11 +25,14 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   // Question 1 Audio
   const [q1Blob, setQ1Blob] = useState<Blob | null>(null);
   const [q1Url, setQ1Url] = useState<string | null>(null);
+  const [q1Duration, setQ1Duration] = useState<number>(3);
 
   // Question 2 Audio
   const [q2Blob, setQ2Blob] = useState<Blob | null>(null);
   const [q2Url, setQ2Url] = useState<string | null>(null);
+  const [q2Duration, setQ2Duration] = useState<number>(3);
 
+  const recordingSecondsRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -99,7 +102,11 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   useEffect(() => {
     if (isRecording) {
       timerRef.current = window.setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1);
+        setRecordingSeconds((prev) => {
+          const next = prev + 1;
+          recordingSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -115,6 +122,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
     try {
       currentChunksRef.current = [];
+      recordingSecondsRef.current = 0;
       const recorder = new MediaRecorder(mediaStreamRef.current, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
       });
@@ -130,14 +138,17 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           type: recorder.mimeType || 'audio/webm',
         });
         const url = URL.createObjectURL(finalBlob);
+        const durationSecs = Math.max(3, recordingSecondsRef.current);
 
         if (questionNum === 1) {
           setQ1Blob(finalBlob);
           setQ1Url(url);
+          setQ1Duration(durationSecs);
           setPhase('question_2');
         } else {
           setQ2Blob(finalBlob);
           setQ2Url(url);
+          setQ2Duration(durationSecs);
           setPhase('review');
         }
       };
@@ -392,6 +403,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             {q1Url && (
               <AudioPreviewPlayer
                 src={q1Url}
+                initialDuration={q1Duration}
                 label={`Q1: ${questions[0] || 'Hometown Description'}`}
                 onRetake={() => {
                   setPhase('question_1');
@@ -404,6 +416,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             {q2Url && (
               <AudioPreviewPlayer
                 src={q2Url}
+                initialDuration={q2Duration}
                 label={`Q2: ${questions[1] || 'Weekend Relaxation'}`}
                 onRetake={() => {
                   setPhase('question_2');
