@@ -236,8 +236,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
         {/* Criteria Feedback Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Task Achievement
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Task Achievement
+              </div>
+              {result.writing_details.task_response_score !== undefined && result.writing_details.task_response_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  Band {result.writing_details.task_response_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.writing_details.task_response_notes || 'Response addressed the main premise with arguments.'}
@@ -245,8 +252,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Coherence & Cohesion
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Coherence & Cohesion
+              </div>
+              {result.writing_details.coherence_score !== undefined && result.writing_details.coherence_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  Band {result.writing_details.coherence_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.writing_details.coherence_notes || 'Paragraph transitions were logically sequenced.'}
@@ -254,8 +268,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Lexical Resource
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Lexical Resource
+              </div>
+              {result.writing_details.lexical_score !== undefined && result.writing_details.lexical_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  Band {result.writing_details.lexical_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.writing_details.vocabulary_notes || 'Demonstrated suitable academic vocabulary.'}
@@ -263,14 +284,72 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Grammatical Range & Accuracy
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Grammatical Range & Accuracy
+              </div>
+              {result.writing_details.grammar_score !== undefined && result.writing_details.grammar_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  Band {result.writing_details.grammar_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.writing_details.grammar_notes || 'Used varied sentence structures with minor punctuation issues.'}
             </p>
           </div>
         </div>
+
+        {/* Word Choice & Vocabulary Insights */}
+        {((result.writing_details.word_feedback && result.writing_details.word_feedback.length > 0) ||
+          (result.writing_details.vocabulary_highlights && result.writing_details.vocabulary_highlights.length > 0)) && (
+          <div className="space-y-2.5 pt-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> Word Choice & Lexical Feedback
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {(result.writing_details.word_feedback || result.writing_details.vocabulary_highlights)!.map((h, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border text-xs space-y-1 ${
+                    h.type === 'effective'
+                      ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                      : 'bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold font-mono">"{h.word}"</span>
+                    <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-white/60 dark:bg-black/20">
+                      {h.type === 'effective' ? 'Effective Choice' : 'Consider Alternatives'}
+                    </span>
+                  </div>
+                  {h.alternatives && h.alternatives.length > 0 && (
+                    <div className="text-[11px] opacity-90">
+                      Alternative options: <span className="font-medium">{h.alternatives.join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Effective Sentences Used */}
+        {((result.writing_details.well_formed_sentences && result.writing_details.well_formed_sentences.length > 0) ||
+          (result.writing_details.strong_excerpts && result.writing_details.strong_excerpts.length > 0)) && (
+          <div className="p-4 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+            <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Effective Sentences from Your Submission:
+            </div>
+            <div className="space-y-1.5">
+              {(result.writing_details.well_formed_sentences || result.writing_details.strong_excerpts)!.map((excerpt, idx) => (
+                <div key={idx} className="text-xs italic text-slate-700 dark:text-slate-300 font-serif pl-3 border-l-2 border-indigo-500">
+                  "{excerpt}"
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Identified Mistakes & Grammar Errors */}
         {result.writing_details.mistakes && result.writing_details.mistakes.length > 0 && (
@@ -309,7 +388,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
         {result.writing_details.tips_to_improve && result.writing_details.tips_to_improve.length > 0 && (
           <div className="p-4 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 space-y-2">
             <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-              <Lightbulb className="w-3.5 h-3.5" /> Writing Tips for Next Attempt:
+              <Lightbulb className="w-3.5 h-3.5" /> Writing Recommendations for Next Attempt:
             </div>
             <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside">
               {result.writing_details.tips_to_improve.map((tip, idx) => (
@@ -336,7 +415,12 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {result.speaking_details.words_per_minute && (
+              <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-semibold">
+                Pace: ~{result.speaking_details.words_per_minute} WPM
+              </span>
+            )}
             <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               Model: {result.speaking_details.ai_model_used || 'Gemini Audio / Whisper'}
             </span>
@@ -359,8 +443,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
         {/* Speaking Feedback Criteria */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Fluency & Rhythm
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Fluency & Coherence
+              </div>
+              {result.speaking_details.fluency_score !== undefined && result.speaking_details.fluency_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                  Band {result.speaking_details.fluency_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.speaking_details.fluency_notes || 'Consistent flow with natural sentence grouping.'}
@@ -368,8 +459,47 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Clarity & Pronunciation
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Lexical Resource
+              </div>
+              {result.speaking_details.lexical_score !== undefined && result.speaking_details.lexical_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                  Band {result.speaking_details.lexical_score.toFixed(1)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              {result.speaking_details.vocabulary_notes || 'Natural colloquial and academic collocations.'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Grammatical Accuracy
+              </div>
+              {result.speaking_details.grammar_score !== undefined && result.speaking_details.grammar_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                  Band {result.speaking_details.grammar_score.toFixed(1)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              {result.speaking_details.grammar_notes || 'Accurate tense agreement with varied clause complexity.'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Pronunciation & Clarity
+              </div>
+              {result.speaking_details.pronunciation_score !== undefined && result.speaking_details.pronunciation_score > 0 && (
+                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                  Band {result.speaking_details.pronunciation_score.toFixed(1)}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {result.speaking_details.clarity_notes || 'Pronunciation was intelligible with clear consonant articulation.'}
@@ -377,11 +507,36 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
           </div>
         </div>
 
-        {/* Weak Spots & Speaking Tips */}
+        {/* Spoken Phrasing & Natural Delivery Feedback */}
+        {((result.speaking_details.spoken_feedback && result.speaking_details.spoken_feedback.length > 0) ||
+          (result.speaking_details.highlighted_quotes && result.speaking_details.highlighted_quotes.length > 0)) && (
+          <div className="space-y-2.5 pt-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-pink-600 dark:text-pink-400 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Spoken Phrasing & Natural Delivery Feedback
+            </h4>
+            <div className="space-y-2">
+              {(result.speaking_details.spoken_feedback || result.speaking_details.highlighted_quotes)!.map((q, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-pink-500/5 dark:bg-pink-500/10 border border-pink-500/20 text-xs space-y-1"
+                >
+                  <div className="italic text-slate-800 dark:text-slate-200 font-serif">
+                    "{q.phrase || q.quote}"
+                  </div>
+                  <div className="text-pink-700 dark:text-pink-300 font-medium text-[11px]">
+                    Delivery tip: {q.suggestion}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actionable Next Steps */}
         {result.speaking_details.tips_to_improve && result.speaking_details.tips_to_improve.length > 0 && (
           <div className="p-4 rounded-2xl bg-pink-500/5 dark:bg-pink-500/10 border border-pink-500/20 space-y-2">
             <div className="text-xs font-bold text-pink-600 dark:text-pink-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> Speaking Recommendations:
+              <Sparkles className="w-3.5 h-3.5" /> Speaking Recommendations for Next Attempt:
             </div>
             <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside">
               {result.speaking_details.tips_to_improve.map((tip, idx) => (

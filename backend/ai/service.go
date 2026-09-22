@@ -103,18 +103,45 @@ func (s *AIService) EvaluateWriting(promptText, essay string) (*models.WritingEv
 		}, nil
 	}
 
+	// Rule 2.5: Under 100 words -> Under-length penalty
+	if wordCount < 100 {
+		return &models.WritingEvaluation{
+			Score:             3.5,
+			TaskResponseScore: 3.0,
+			CoherenceScore:    3.5,
+			LexicalScore:      4.0,
+			GrammarScore:      3.5,
+			TaskResponseNotes: fmt.Sprintf("Response is under 100 words (%d words). In standard IELTS assessment, essays falling substantially below the minimum 150-word threshold receive major penalties on Task Achievement.", wordCount),
+			CoherenceNotes:    "Paragraph development is truncated due to insufficient overall length.",
+			VocabularyNotes:   "Vocabulary range is limited by brevity of response.",
+			GrammarNotes:      "Sentence variety cannot be fully demonstrated in under 100 words.",
+			Mistakes:          []models.WritingMistake{},
+			Strengths:         []string{"Initial viewpoint was outlined."},
+			TipsToImprove: []string{
+				"Aim for at least 150-250 words to meet minimum task length criteria.",
+				"Develop each point with a topic sentence, supporting evidence, and a practical illustration.",
+			},
+			AIModelUsed: "Deterministic Length & Rubric Pre-check",
+		}, nil
+	}
+
 	// Rule 3: Real attempt -> Full AI evaluation
 	systemPrompt := `You are an expert IELTS/CEFR English writing examiner.
-Evaluate the following essay against standard academic criteria:
+Evaluate the following essay against the four standard criteria:
 1. Task Achievement / Response
 2. Coherence and Cohesion
 3. Lexical Resource (Vocabulary)
 4. Grammatical Range and Accuracy
 
 The score MUST be between 0.0 and 9.0 in half steps ONLY (e.g. 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0).
+Calculate an individual score for each criterion, and the overall score as their average rounded to the nearest half step.
 Return ONLY a valid JSON object matching this schema exactly:
 {
   "score": number,
+  "task_response_score": number,
+  "coherence_score": number,
+  "lexical_score": number,
+  "grammar_score": number,
   "task_response_notes": "string",
   "coherence_notes": "string",
   "vocabulary_notes": "string",
@@ -127,8 +154,16 @@ Return ONLY a valid JSON object matching this schema exactly:
       "category": "grammar" | "spelling" | "vocabulary" | "cohesion"
     }
   ],
+  "word_feedback": [
+    {
+      "word": "notable word used",
+      "type": "effective" | "needs_variety",
+      "alternatives": ["alternative 1", "alternative 2"]
+    }
+  ],
+  "well_formed_sentences": ["exact well-crafted sentence from essay", "another effective sentence"],
   "strengths": ["string", "string"],
-  "tips_to_improve": ["string", "string"]
+  "tips_to_improve": ["actionable advice to improve writing flow and structure"]
 }`
 
 	userContent := fmt.Sprintf("Prompt: %s\n\nCandidate Essay:\n%s", promptText, essay)
@@ -138,6 +173,18 @@ Return ONLY a valid JSON object matching this schema exactly:
 		eval, err := s.callGeminiText(systemPrompt, userContent)
 		if err == nil {
 			eval.Score = RoundToHalfStep(eval.Score)
+			if eval.TaskResponseScore == 0 {
+				eval.TaskResponseScore = eval.Score
+			}
+			if eval.CoherenceScore == 0 {
+				eval.CoherenceScore = eval.Score
+			}
+			if eval.LexicalScore == 0 {
+				eval.LexicalScore = eval.Score
+			}
+			if eval.GrammarScore == 0 {
+				eval.GrammarScore = eval.Score
+			}
 			eval.AIModelUsed = "gemini-3.6-flash"
 			return eval, nil
 		}
@@ -340,24 +387,35 @@ func (s *AIService) callGeminiAudio(audioData []byte, mimeType string, questions
 	systemInstruction := `You are an expert IELTS English speaking examiner.
 You will listen to the candidate's spoken response to the given interview questions.
 First, transcribe everything the candidate said verbatim.
-Second, evaluate the candidate's performance across:
+Second, evaluate the candidate's performance across the four standard criteria:
 1. Fluency & Coherence
 2. Lexical Resource (Vocabulary)
 3. Grammatical Range & Accuracy
 4. Pronunciation & Clarity
 
 Calculate an overall speaking score from 0.0 to 9.0 in half steps ONLY (e.g. 5.0, 5.5, 6.0, 6.5, 7.0).
-If the candidate barely spoke or spoke unintelligibly, assign a low score (e.g. 2.0 to 3.5).
+Calculate individual sub-scores for fluency, lexical resource, grammar, and pronunciation in half steps.
+Provide constructive recommendations to help the candidate develop their spoken English and fluency.
 Return ONLY a valid JSON object matching this schema:
 {
   "transcript": "Exact transcription of the candidate's spoken words",
   "score": number,
+  "fluency_score": number,
+  "lexical_score": number,
+  "grammar_score": number,
+  "pronunciation_score": number,
   "fluency_notes": "string",
   "clarity_notes": "string",
   "vocabulary_notes": "string",
   "grammar_notes": "string",
+  "spoken_feedback": [
+    {
+      "phrase": "exact phrase spoken by candidate",
+      "suggestion": "actionable tip for more natural phrasing or syntax"
+    }
+  ],
   "weak_spots": ["string"],
-  "tips_to_improve": ["string"]
+  "tips_to_improve": ["actionable suggestions to develop spoken fluency"]
 }`
 
 	prompt := fmt.Sprintf("Questions asked:\n1. %s\n2. %s\n\nPlease transcribe the audio and evaluate according to the IELTS criteria.",
@@ -432,6 +490,32 @@ Return ONLY a valid JSON object matching this schema:
 		return nil, fmt.Errorf("failed to parse speaking evaluation json: %w", err)
 	}
 
+	words := strings.Fields(eval.Transcript)
+	wordCount := len(words)
+	durationSec := len(audioData) / 3200
+	if durationSec < 10 {
+		durationSec = 10
+	}
+	if durationSec > 120 {
+		durationSec = 120
+	}
+	eval.SpeakingDurationSec = durationSec
+	if durationSec > 0 {
+		eval.WordsPerMinute = int(float64(wordCount) / (float64(durationSec) / 60.0))
+	}
+	if eval.FluencyScore == 0 {
+		eval.FluencyScore = eval.Score
+	}
+	if eval.LexicalScore == 0 {
+		eval.LexicalScore = eval.Score
+	}
+	if eval.GrammarScore == 0 {
+		eval.GrammarScore = eval.Score
+	}
+	if eval.PronunciationScore == 0 {
+		eval.PronunciationScore = eval.Score
+	}
+
 	return &eval, nil
 }
 
@@ -487,22 +571,41 @@ func (s *AIService) transcribeWithGroqWhisper(audioData []byte, mimeType string)
 }
 
 func (s *AIService) scoreTranscriptWithGroq(transcript string, questions []string) (*models.SpeakingEvaluation, error) {
-	systemPrompt := `You are an IELTS speaking examiner.
-Evaluate the spoken transcript against criteria: Fluency, Vocabulary, Grammar, Clarity.
-Score MUST be 0.0 to 9.0 in half steps ONLY.
-Return ONLY valid JSON matching:
+	words := strings.Fields(transcript)
+	wordCount := len(words)
+	durationSec := int(float64(wordCount) / 130.0 * 60.0)
+	if durationSec < 15 {
+		durationSec = 15
+	}
+	wpm := int(float64(wordCount) / (float64(durationSec) / 60.0))
+
+	systemPrompt := `You are an expert IELTS speaking examiner.
+Evaluate the spoken transcript across the four standard criteria: Fluency, Vocabulary, Grammar, Pronunciation.
+Score MUST be between 0.0 and 9.0 in half steps ONLY.
+Calculate individual sub-scores for fluency, lexical resource, grammar, and pronunciation in half steps.
+Return ONLY valid JSON matching this schema:
 {
   "score": number,
+  "fluency_score": number,
+  "lexical_score": number,
+  "grammar_score": number,
+  "pronunciation_score": number,
   "fluency_notes": "string",
   "clarity_notes": "string",
   "vocabulary_notes": "string",
   "grammar_notes": "string",
+  "spoken_feedback": [
+    {
+      "phrase": "exact phrase from transcript",
+      "suggestion": "actionable tip for more natural phrasing or syntax"
+    }
+  ],
   "weak_spots": ["string"],
-  "tips_to_improve": ["string"]
+  "tips_to_improve": ["actionable suggestions to develop spoken fluency"]
 }`
 
-	userContent := fmt.Sprintf("Questions:\n1. %s\n2. %s\n\nSpoken Transcript:\n%s",
-		questions[0], questions[1], transcript)
+	userContent := fmt.Sprintf("Candidate spoke %d words in approximately %d seconds (~%d WPM).\n\nQuestions:\n1. %s\n2. %s\n\nSpoken Transcript:\n%s",
+		wordCount, durationSec, wpm, questions[0], questions[1], transcript)
 
 	url := "https://api.groq.com/openai/v1/chat/completions"
 	payload := map[string]interface{}{
@@ -548,6 +651,21 @@ Return ONLY valid JSON matching:
 	rawJSON := CleanJSON(groqResp.Choices[0].Message.Content)
 	if err := json.Unmarshal([]byte(rawJSON), &eval); err != nil {
 		return nil, err
+	}
+
+	eval.SpeakingDurationSec = durationSec
+	eval.WordsPerMinute = wpm
+	if eval.FluencyScore == 0 {
+		eval.FluencyScore = eval.Score
+	}
+	if eval.LexicalScore == 0 {
+		eval.LexicalScore = eval.Score
+	}
+	if eval.GrammarScore == 0 {
+		eval.GrammarScore = eval.Score
+	}
+	if eval.PronunciationScore == 0 {
+		eval.PronunciationScore = eval.Score
 	}
 
 	return &eval, nil

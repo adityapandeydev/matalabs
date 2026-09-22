@@ -43,6 +43,13 @@ type TestContent struct {
 	SpeakingQuestions  []string   `json:"speaking_questions"`
 }
 
+// WordFeedback represents an effective or improvable vocabulary choice
+type WordFeedback struct {
+	Word         string   `json:"word"`
+	Type         string   `json:"type"` // "effective" or "needs_variety"
+	Alternatives []string `json:"alternatives,omitempty"`
+}
+
 // WritingMistake details a specific grammar/vocabulary error identified by AI
 type WritingMistake struct {
 	Original    string `json:"original"`
@@ -53,30 +60,50 @@ type WritingMistake struct {
 
 // WritingEvaluation represents structured grading returned by AI
 type WritingEvaluation struct {
-	Score              float64          `json:"score"` // 0 to 9, half steps (e.g. 6.0, 6.5, 7.0)
-	TaskResponseNotes  string           `json:"task_response_notes"`
-	CoherenceNotes     string           `json:"coherence_notes"`
-	VocabularyNotes    string           `json:"vocabulary_notes"`
-	GrammarNotes       string           `json:"grammar_notes"`
-	Mistakes           []WritingMistake `json:"mistakes"`
-	Strengths          []string         `json:"strengths"`
-	TipsToImprove      []string         `json:"tips_to_improve"`
-	AIModelUsed        string           `json:"ai_model_used"`
-	EvaluationError    string           `json:"evaluation_error,omitempty"`
+	Score               float64          `json:"score"` // Overall band: 0 to 9, half steps (e.g. 6.0, 6.5, 7.0)
+	TaskResponseScore   float64          `json:"task_response_score,omitempty"`
+	CoherenceScore      float64          `json:"coherence_score,omitempty"`
+	LexicalScore        float64          `json:"lexical_score,omitempty"`
+	GrammarScore        float64          `json:"grammar_score,omitempty"`
+	TaskResponseNotes   string           `json:"task_response_notes"`
+	CoherenceNotes      string           `json:"coherence_notes"`
+	VocabularyNotes     string           `json:"vocabulary_notes"`
+	GrammarNotes        string           `json:"grammar_notes"`
+	Mistakes            []WritingMistake `json:"mistakes"`
+	WordFeedback        []WordFeedback   `json:"word_feedback,omitempty"`
+	WellFormedSentences []string         `json:"well_formed_sentences,omitempty"`
+	Strengths           []string         `json:"strengths"`
+	TipsToImprove       []string         `json:"tips_to_improve"`
+	AIModelUsed         string           `json:"ai_model_used"`
+	EvaluationError     string           `json:"evaluation_error,omitempty"`
+}
+
+// SpokenFeedbackItem details an exact spoken phrase with guidance
+type SpokenFeedbackItem struct {
+	Phrase     string `json:"phrase,omitempty"`
+	Quote      string `json:"quote,omitempty"`
+	Suggestion string `json:"suggestion"`
 }
 
 // SpeakingEvaluation represents structured grading for spoken audio
 type SpeakingEvaluation struct {
-	Score           float64  `json:"score"` // 0 to 9, half steps
-	Transcript      string   `json:"transcript"`
-	FluencyNotes    string   `json:"fluency_notes"`
-	ClarityNotes    string   `json:"clarity_notes"`
-	VocabularyNotes string   `json:"vocabulary_notes"`
-	GrammarNotes    string   `json:"grammar_notes"`
-	WeakSpots       []string `json:"weak_spots"`
-	TipsToImprove   []string `json:"tips_to_improve"`
-	AIModelUsed     string   `json:"ai_model_used"`
-	EvaluationError string   `json:"evaluation_error,omitempty"`
+	Score               float64              `json:"score"` // Overall band: 0 to 9, half steps
+	FluencyScore        float64              `json:"fluency_score,omitempty"`
+	LexicalScore        float64              `json:"lexical_score,omitempty"`
+	GrammarScore        float64              `json:"grammar_score,omitempty"`
+	PronunciationScore  float64              `json:"pronunciation_score,omitempty"`
+	WordsPerMinute      int                  `json:"words_per_minute,omitempty"`
+	SpeakingDurationSec int                  `json:"speaking_duration_sec,omitempty"`
+	Transcript          string               `json:"transcript"`
+	FluencyNotes        string               `json:"fluency_notes"`
+	ClarityNotes        string               `json:"clarity_notes"`
+	VocabularyNotes     string               `json:"vocabulary_notes"`
+	GrammarNotes        string               `json:"grammar_notes"`
+	SpokenFeedback      []SpokenFeedbackItem `json:"spoken_feedback,omitempty"`
+	WeakSpots           []string             `json:"weak_spots"`
+	TipsToImprove       []string             `json:"tips_to_improve"`
+	AIModelUsed         string               `json:"ai_model_used"`
+	EvaluationError     string               `json:"evaluation_error,omitempty"`
 }
 
 // FullSubmissionRequest is submitted at the end of speaking
