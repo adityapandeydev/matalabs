@@ -73,6 +73,18 @@ func InitDB(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Ensure idx_test_results_user is strictly UNIQUE (rebuilding if previously created as non-unique)
+	uniqueIndexMigration := `
+	DELETE FROM test_results WHERE rowid NOT IN (
+		SELECT MAX(rowid) FROM test_results GROUP BY user_id
+	);
+	DROP INDEX IF EXISTS idx_test_results_user;
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_test_results_user ON test_results(user_id);
+	`
+	if _, err := conn.Exec(uniqueIndexMigration); err != nil {
+		log.Printf("[DB] Note on unique index migration: %v", err)
+	}
+
 	log.Printf("[DB] SQLite database initialized at %s with WAL mode", dbPath)
 	return &DB{conn: conn}, nil
 }

@@ -27,7 +27,7 @@ func NewAIService(geminiKey, groqKey string) *AIService {
 	return &AIService{
 		GeminiKey: geminiKey,
 		GroqKey:   groqKey,
-		client:    &http.Client{Timeout: 45 * time.Second},
+		client:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -206,7 +206,7 @@ Return ONLY a valid JSON object matching this schema exactly:
 }
 
 func (s *AIService) callGeminiText(systemPrompt, userContent string) (*models.WritingEvaluation, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=%s", s.GeminiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%s", s.GeminiKey)
 
 	payload := map[string]interface{}{
 		"systemInstruction": map[string]interface{}{
@@ -377,7 +377,7 @@ func (s *AIService) EvaluateSpeaking(audioData []byte, mimeType string, question
 }
 
 func (s *AIService) callGeminiAudio(audioData []byte, mimeType string, questions []string) (*models.SpeakingEvaluation, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=%s", s.GeminiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%s", s.GeminiKey)
 
 	encodedAudio := base64.StdEncoding.EncodeToString(audioData)
 	if mimeType == "" {
