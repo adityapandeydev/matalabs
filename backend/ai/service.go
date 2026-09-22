@@ -168,7 +168,30 @@ Return ONLY a valid JSON object matching this schema exactly:
 
 	userContent := fmt.Sprintf("Prompt: %s\n\nCandidate Essay:\n%s", promptText, essay)
 
-	// Try Gemini first
+	// 1. Try Groq first (sub-second response, highly reliable)
+	if s.GroqKey != "" {
+		eval, err := s.callGroqText(systemPrompt, userContent)
+		if err == nil {
+			eval.Score = RoundToHalfStep(eval.Score)
+			if eval.TaskResponseScore == 0 {
+				eval.TaskResponseScore = eval.Score
+			}
+			if eval.CoherenceScore == 0 {
+				eval.CoherenceScore = eval.Score
+			}
+			if eval.LexicalScore == 0 {
+				eval.LexicalScore = eval.Score
+			}
+			if eval.GrammarScore == 0 {
+				eval.GrammarScore = eval.Score
+			}
+			eval.AIModelUsed = "groq/gpt-oss-120b"
+			return eval, nil
+		}
+		log.Printf("[AI] Groq writing error: %v. Trying Gemini fallback...", err)
+	}
+
+	// 2. Fallback to Gemini
 	if s.GeminiKey != "" {
 		eval, err := s.callGeminiText(systemPrompt, userContent)
 		if err == nil {
@@ -188,18 +211,7 @@ Return ONLY a valid JSON object matching this schema exactly:
 			eval.AIModelUsed = "gemini-3.6-flash"
 			return eval, nil
 		}
-		log.Printf("[AI] Gemini writing error: %v. Trying Groq fallback...", err)
-	}
-
-	// Fallback to Groq
-	if s.GroqKey != "" {
-		eval, err := s.callGroqText(systemPrompt, userContent)
-		if err == nil {
-			eval.Score = RoundToHalfStep(eval.Score)
-			eval.AIModelUsed = "llama-3.3-70b (groq)"
-			return eval, nil
-		}
-		log.Printf("[AI] Groq writing error: %v", err)
+		log.Printf("[AI] Gemini writing error: %v", err)
 	}
 
 	return nil, errors.New("AI writing evaluation service temporarily unavailable. Please try again.")
@@ -348,18 +360,7 @@ func (s *AIService) EvaluateSpeaking(audioData []byte, mimeType string, question
 		}, nil
 	}
 
-	// 1. Try Gemini Multimodal (Takes audio directly + transcribes + scores in 1 single free call!)
-	if s.GeminiKey != "" {
-		eval, err := s.callGeminiAudio(audioData, mimeType, questions)
-		if err == nil {
-			eval.Score = RoundToHalfStep(eval.Score)
-			eval.AIModelUsed = "gemini-3.6-flash (multimodal audio)"
-			return eval, nil
-		}
-		log.Printf("[AI] Gemini audio evaluation error: %v. Attempting Groq Whisper pipeline...", err)
-	}
-
-	// 2. Fallback: Transcribe with Groq Whisper + Score with Groq LLM
+	// 1. Try Groq Whisper + Groq LLM first (blazing fast audio transcription + evaluation)
 	if s.GroqKey != "" {
 		transcript, err := s.transcribeWithGroqWhisper(audioData, mimeType)
 		if err == nil && len(strings.TrimSpace(transcript)) > 0 {
@@ -367,10 +368,24 @@ func (s *AIService) EvaluateSpeaking(audioData []byte, mimeType string, question
 			if err == nil {
 				eval.Transcript = transcript
 				eval.Score = RoundToHalfStep(eval.Score)
-				eval.AIModelUsed = "whisper-large-v3-turbo + llama-3.3-70b"
+				eval.AIModelUsed = "whisper-large-v3-turbo + groq/gpt-oss-120b"
 				return eval, nil
 			}
+			log.Printf("[AI] Groq transcript scoring error: %v. Trying Gemini fallback...", err)
+		} else {
+			log.Printf("[AI] Groq Whisper error: %v. Trying Gemini fallback...", err)
 		}
+	}
+
+	// 2. Fallback to Gemini Multimodal Audio
+	if s.GeminiKey != "" {
+		eval, err := s.callGeminiAudio(audioData, mimeType, questions)
+		if err == nil {
+			eval.Score = RoundToHalfStep(eval.Score)
+			eval.AIModelUsed = "gemini-3.6-flash (multimodal audio)"
+			return eval, nil
+		}
+		log.Printf("[AI] Gemini audio evaluation error: %v", err)
 	}
 
 	return nil, errors.New("Speaking AI evaluation service temporarily unavailable. Please try again.")
