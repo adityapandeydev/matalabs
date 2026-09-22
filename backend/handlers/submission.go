@@ -132,9 +132,25 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 	// 4. Identify weakest part and diagnostic advice
 	weakestSkill, advice := determineWeakestSkill(listeningScore, readingScore, writingEval.Score, speakingEval.Score)
 
+	candidateName := sub.CandidateName
+	candidateContact := sub.CandidateContact
+	if candidateName == "" || candidateContact == "" {
+		if u, err := h.DB.GetUser(userID); err == nil && u != nil {
+			if candidateName == "" {
+				candidateName = u.Name
+			}
+			if candidateContact == "" {
+				candidateContact = u.Email
+			}
+		}
+	}
+	if candidateName == "" {
+		candidateName = "Candidate"
+	}
+
 	result := &models.TestResultResponse{
 		ID:              uuid.New().String(),
-		CandidateName:   sub.CandidateName,
+		CandidateName:   candidateName,
 		TargetScore:     sub.TargetScore,
 		OverallScore:    overallScore,
 		ListeningScore:  listeningScore,
@@ -149,7 +165,7 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 	}
 
 	// 5. Persist result in SQLite
-	if err := h.DB.SaveTestResult(result, userID, sub.CandidateContact); err != nil {
+	if err := h.DB.SaveTestResult(result, userID, candidateContact); err != nil {
 		log.Printf("[DB] Error saving test result: %v", err)
 	}
 

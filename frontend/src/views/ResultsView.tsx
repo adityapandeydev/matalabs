@@ -37,6 +37,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
     }
   }, []);
 
+  const [currentTarget, setCurrentTarget] = React.useState<number>(result.target_score || 7.5);
+
   const partScores = [
     {
       name: 'Listening',
@@ -106,21 +108,39 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
             <span className="text-[11px] opacity-75 font-mono">Band Scale</span>
           </div>
 
-          <div className="text-left space-y-1.5 sm:border-l sm:border-slate-200 sm:dark:border-white/10 sm:pl-6">
+          <div className="text-left space-y-2 sm:border-l sm:border-slate-200 sm:dark:border-white/10 sm:pl-6">
             <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
               Target Comparison
             </div>
             <div className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <span>Target: {result.target_score.toFixed(1)}</span>
-              {result.overall_score >= result.target_score ? (
+              <span>Target: {currentTarget.toFixed(1)}</span>
+              {result.overall_score >= currentTarget ? (
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Target Achieved!
                 </span>
               ) : (
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                  Gap: {(result.target_score - result.overall_score).toFixed(1)} Band
+                  Gap: {(currentTarget - result.overall_score).toFixed(1)} Band
                 </span>
               )}
+            </div>
+            {/* Interactive Target Pills */}
+            <div className="flex items-center gap-1.5 pt-1">
+              <span className="text-[11px] text-slate-400 font-medium">Goal:</span>
+              {[6.0, 6.5, 7.0, 7.5, 8.0, 8.5].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setCurrentTarget(t)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+                    currentTarget === t
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {t.toFixed(1)}
+                </button>
+              ))}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
               Calculated as the exact average of your 4 assessed sections.

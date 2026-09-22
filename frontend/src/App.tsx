@@ -4,7 +4,6 @@ import type { TestStage, TestContent, TestResult, AuthUser } from './types';
 import { fetchTestContent, loginWithGoogle, submitFullTest } from './services/api';
 
 import { ThemeToggle } from './components/ThemeToggle';
-import { WelcomeView } from './views/WelcomeView';
 import { ListeningView } from './views/ListeningView';
 import { ReadingView } from './views/ReadingView';
 import { PauseView } from './views/PauseView';
@@ -37,23 +36,7 @@ export const App: React.FC = () => {
     }
   }, [isDark]);
 
-  // Test Flow States
-  const [stage, setStage] = useState<TestStage>('welcome');
-  const [testContent, setTestContent] = useState<TestContent | null>(null);
-  const [loadingContent, setLoadingContent] = useState(true);
-
-  // Candidate Data
-  const [candidateName, setCandidateName] = useState('');
-  const [candidateContact, setCandidateContact] = useState('');
-  const [targetScore, setTargetScore] = useState(7.0);
-
-  // Submissions Data
-  const [listeningAnswers, setListeningAnswers] = useState<Record<string, number>>({});
-  const [readingAnswers, setReadingAnswers] = useState<Record<string, number>>({});
-  const [essayText, setEssayText] = useState('');
-  const [finalResult, setFinalResult] = useState<TestResult | null>(null);
-
-  // Auth Data
+  // Auth Data (loaded from storage if already authenticated)
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem('matalabs_user');
     return saved ? JSON.parse(saved) : null;
@@ -62,7 +45,23 @@ export const App: React.FC = () => {
     return localStorage.getItem('matalabs_token');
   });
 
-  // Load Test Content from Go Backend
+  // Test Flow States - Starts directly on Listening!
+  const [stage, setStage] = useState<TestStage>('listening');
+  const [testContent, setTestContent] = useState<TestContent | null>(null);
+  const [loadingContent, setLoadingContent] = useState(true);
+
+  // Candidate Data (automatically retrieved from Google profile)
+  const [candidateName, setCandidateName] = useState(() => authUser?.name || '');
+  const [candidateContact, setCandidateContact] = useState(() => authUser?.email || '');
+  const [targetScore] = useState(7.5);
+
+  // Submissions Data
+  const [listeningAnswers, setListeningAnswers] = useState<Record<string, number>>({});
+  const [readingAnswers, setReadingAnswers] = useState<Record<string, number>>({});
+  const [essayText, setEssayText] = useState('');
+  const [finalResult, setFinalResult] = useState<TestResult | null>(null);
+
+  // Load Test Content from Backend
   useEffect(() => {
     fetchTestContent()
       .then((data) => {
@@ -75,43 +74,39 @@ export const App: React.FC = () => {
       });
   }, []);
 
-  // 1. Welcome Complete
-  const handleStartWelcome = (data: { name: string; contact: string; targetScore: number }) => {
-    setCandidateName(data.name);
-    setCandidateContact(data.contact);
-    setTargetScore(data.targetScore);
-    setStage('listening');
-  };
-
-  // 2. Listening Complete -> Move to Pause 1 (no score shown)
+  // 1. Listening Complete -> Move to Pause 1 (no score shown)
   const handleListeningSubmit = (answers: Record<string, number>) => {
     setListeningAnswers(answers);
     setStage('pause_reading');
   };
 
-  // 3. Pause 1 Complete -> Move to Reading
+  // 2. Pause 1 Complete -> Move to Reading
   const handlePauseReadingContinue = () => {
     setStage('reading');
   };
 
-  // 4. Reading Complete -> Check Google Auth Gate
+  // 3. Reading Complete -> Check Google Auth Gate
   const handleReadingSubmit = (answers: Record<string, number>) => {
     setReadingAnswers(answers);
     // If user is already authenticated with Google, advance directly to Writing!
     if (authToken && authUser) {
+      setCandidateName(authUser.name);
+      setCandidateContact(authUser.email);
       setStage('writing');
     } else {
       setStage('auth_gate');
     }
   };
 
-  // 5. Google Sign-In Success -> Advances immediately to Writing
+  // 4. Google Sign-In Success -> Populates candidate identity and advances to Writing
   const handleGoogleAuthSuccess = async (credential: string) => {
     const authData = await loginWithGoogle(credential);
     setAuthToken(authData.token);
     setAuthUser(authData.user);
     localStorage.setItem('matalabs_token', authData.token);
     localStorage.setItem('matalabs_user', JSON.stringify(authData.user));
+    setCandidateName(authData.user.name);
+    setCandidateContact(authData.user.email);
     setStage('writing');
   };
 
@@ -181,7 +176,7 @@ export const App: React.FC = () => {
     setReadingAnswers({});
     setEssayText('');
     setFinalResult(null);
-    setStage('welcome');
+    setStage('listening');
   };
 
   // Stage progress navigation dots
@@ -212,7 +207,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Stage Progress Pills (Shown during test) */}
-            {stage !== 'welcome' && stage !== 'preparing' && (
+            {stage !== 'preparing' && (
               <div className="hidden md:flex items-center gap-2">
                 {stagePills.map((pill) => {
                   const Icon = pill.icon;
@@ -264,10 +259,6 @@ export const App: React.FC = () => {
             </div>
           ) : (
             <AnimatePresence mode="wait">
-              {stage === 'welcome' && (
-                <WelcomeView key="welcome" onStart={handleStartWelcome} />
-              )}
-
               {stage === 'listening' && testContent && (
                 <ListeningView
                   key="listening"

@@ -66,7 +66,7 @@ func InitDB(dbPath string) (*DB, error) {
 		FOREIGN KEY(user_id) REFERENCES users(id)
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_test_results_user ON test_results(user_id);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_test_results_user ON test_results(user_id);
 	`
 
 	if _, err := conn.Exec(schema); err != nil {
@@ -94,7 +94,19 @@ func (d *DB) UpsertUser(u *models.User) error {
 	return err
 }
 
-// SaveTestResult persists the consolidated result
+// GetUser retrieves user by Google ID
+func (d *DB) GetUser(id string) (*models.User, error) {
+	row := d.conn.QueryRow("SELECT id, email, name, picture, created_at FROM users WHERE id = ?", id)
+	var u models.User
+	var createdAt time.Time
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &u.Picture, &createdAt); err != nil {
+		return nil, err
+	}
+	u.CreatedAt = createdAt
+	return &u, nil
+}
+
+// SaveTestResult persists or updates the consolidated result for a candidate
 func (d *DB) SaveTestResult(res *models.TestResultResponse, userID, contact string) error {
 	wJSON, err := json.Marshal(res.WritingDetails)
 	if err != nil {
@@ -111,7 +123,22 @@ func (d *DB) SaveTestResult(res *models.TestResultResponse, userID, contact stri
 		target_score, overall_score, listening_score, reading_score,
 		writing_score, speaking_score, weakest_skill, what_to_practise,
 		writing_json, speaking_json, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(user_id) DO UPDATE SET
+		id=excluded.id,
+		candidate_name=excluded.candidate_name,
+		candidate_contact=excluded.candidate_contact,
+		target_score=excluded.target_score,
+		overall_score=excluded.overall_score,
+		listening_score=excluded.listening_score,
+		reading_score=excluded.reading_score,
+		writing_score=excluded.writing_score,
+		speaking_score=excluded.speaking_score,
+		weakest_skill=excluded.weakest_skill,
+		what_to_practise=excluded.what_to_practise,
+		writing_json=excluded.writing_json,
+		speaking_json=excluded.speaking_json,
+		created_at=excluded.created_at;
 	`
 	_, err = d.conn.Exec(query,
 		res.ID, userID, res.CandidateName, contact,
