@@ -66,7 +66,6 @@ func main() {
 
 	// Essential Middlewares
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
@@ -84,7 +83,7 @@ func main() {
 	// Public Health Check
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(fmt.Sprintf(`{"status":"healthy","time":"%s"}`, time.Now().Format(time.RFC3339))))
+		w.Write(fmt.Appendf(nil, `{"status":"healthy","time":"%s"}`, time.Now().Format(time.RFC3339)))
 	})
 
 	// Public Routes
