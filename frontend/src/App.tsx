@@ -375,6 +375,8 @@ export const App: React.FC = () => {
                 <ResultsView
                   key="results"
                   result={finalResult}
+                  speakingQuestions={testContent?.speaking_questions}
+                  writingPrompt={testContent?.writing_prompt}
                   onRetake={handleRetake}
                 />
               )}

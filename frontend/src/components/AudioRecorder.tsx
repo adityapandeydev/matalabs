@@ -134,12 +134,31 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
-  const stopActualRecording = (nextPhase: 'question_2' | 'review') => {
+  const pauseRecordingForNextQuestion = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.pause();
+    }
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    setPhase('question_2');
+  };
+
+  const resumeRecordingForQuestion2 = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+    } else {
+      startActualRecording();
+    }
+  };
+
+  const stopAndFinishRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
-    setPhase(nextPhase);
+    setPhase('review');
   };
 
   const handleFinish = () => {
@@ -282,7 +301,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => stopActualRecording('question_2')}
+                onClick={pauseRecordingForNextQuestion}
                 className="flex-1 py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
                 <Square className="w-4 h-4 text-rose-400 fill-current" /> Stop & Move to Question 2
@@ -334,7 +353,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={startActualRecording}
+                onClick={resumeRecordingForQuestion2}
                 className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-medium flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-pink-600/20 transition-all"
               >
                 <Mic className="w-5 h-5" /> Start Speaking Question 2
@@ -343,7 +362,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => stopActualRecording('review')}
+                onClick={stopAndFinishRecording}
                 className="flex-1 py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
                 <Square className="w-4 h-4 text-rose-400 fill-current" /> Complete Speaking Recording

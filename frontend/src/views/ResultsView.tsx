@@ -19,10 +19,17 @@ import { motion } from 'framer-motion';
 
 interface ResultsViewProps {
   result: TestResult | null;
+  speakingQuestions?: string[];
+  writingPrompt?: string;
   onRetake: () => void;
 }
 
-export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) => {
+export const ResultsView: React.FC<ResultsViewProps> = ({
+  result,
+  speakingQuestions,
+  writingPrompt,
+  onRetake,
+}) => {
   useEffect(() => {
     if (!result) return;
     // Launch celebratory confetti burst
@@ -252,13 +259,25 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               )}
-              AI: {result.writing_details.ai_model_used || 'Gemini 3.5 Flash'}
+              AI: {result.writing_details.ai_model_used || 'Gemini 3.6 Flash'}
             </span>
             <span className="text-sm font-extrabold font-mono px-3 py-1 rounded-xl bg-amber-500 text-white font-tabular">
               Band {result.writing_score.toFixed(1)}
             </span>
           </div>
         </div>
+
+        {/* Writing Task Prompt if available */}
+        {writingPrompt && (
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-1.5">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <PenTool className="w-3.5 h-3.5 text-amber-500" /> Writing Task Prompt Evaluated:
+            </div>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+              {writingPrompt}
+            </p>
+          </div>
+        )}
 
         {/* Warning if AI failed */}
         {result.writing_details.evaluation_error && (
@@ -489,6 +508,23 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
             </div>
           </div>
         )}
+
+        {/* Interview Questions Card */}
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-2">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <Mic className="w-3.5 h-3.5 text-pink-500" /> Interview Questions Evaluated:
+          </div>
+          <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-pink-600 dark:text-pink-400 font-bold shrink-0">Q1:</span>
+              <span>{speakingQuestions?.[0] || 'Describe an interesting place in your hometown.'}</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-pink-600 dark:text-pink-400 font-bold shrink-0">Q2:</span>
+              <span>{speakingQuestions?.[1] || 'How do you usually relax after a demanding week?'}</span>
+            </div>
+          </div>
+        </div>
 
         {/* Speech Transcript */}
         <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-2">
