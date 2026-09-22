@@ -87,7 +87,6 @@ func main() {
 	})
 
 	// Public Routes
-	r.Get("/api/audio/sample-listening.mp3", handlers.ServeAudioHandler)
 	r.Get("/api/test/content", handlers.GetTestContentHandler)
 	r.Post("/api/auth/google", authHandler.GoogleAuthHandler)
 

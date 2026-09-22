@@ -37,7 +37,7 @@ export const PreparingView: React.FC<PreparingViewProps> = ({ isDark }) => {
         {/* Glow ambient background */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Featured RareFormLabs Animated Thinking Orb */}
+        {/* Animated Thinking Orb */}
         <div className="flex justify-center pt-2">
           <ThinkingOrb state="solving" size={96} isDark={isDark} />
         </div>
@@ -63,7 +63,7 @@ export const PreparingView: React.FC<PreparingViewProps> = ({ isDark }) => {
           </div>
         </div>
 
-        {/* Apple-styled Indeterminate Progress Bar */}
+        {/* Indeterminate Progress Bar */}
         <div className="w-full bg-slate-200/70 dark:bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
           <motion.div
             initial={{ width: '15%' }}

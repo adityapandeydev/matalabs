@@ -4,6 +4,7 @@ import type { TestStage, TestContent, TestResult, AuthUser } from './types';
 import { fetchTestContent, loginWithGoogle, submitFullTest } from './services/api';
 
 import { ThemeToggle } from './components/ThemeToggle';
+import { WelcomeView } from './views/WelcomeView';
 import { ListeningView } from './views/ListeningView';
 import { ReadingView } from './views/ReadingView';
 import { PauseView } from './views/PauseView';
@@ -45,15 +46,15 @@ export const App: React.FC = () => {
     return localStorage.getItem('matalabs_token');
   });
 
-  // Test Flow States - Starts directly on Listening!
-  const [stage, setStage] = useState<TestStage>('listening');
+  // Test Flow States - Starts on Welcome stage
+  const [stage, setStage] = useState<TestStage>('welcome');
   const [testContent, setTestContent] = useState<TestContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(true);
 
-  // Candidate Data (automatically retrieved from Google profile)
+  // Candidate Data (target score chosen on Welcome, identity from Google profile)
   const [candidateName, setCandidateName] = useState(() => authUser?.name || '');
   const [candidateContact, setCandidateContact] = useState(() => authUser?.email || '');
-  const [targetScore] = useState(7.5);
+  const [targetScore, setTargetScore] = useState<number>(7.5);
 
   // Submissions Data
   const [listeningAnswers, setListeningAnswers] = useState<Record<string, number>>({});
@@ -74,6 +75,12 @@ export const App: React.FC = () => {
         setLoadingContent(false);
       });
   }, []);
+
+  // 0. Welcome Complete -> Begin with chosen target score
+  const handleWelcomeStart = (chosenTarget: number) => {
+    setTargetScore(chosenTarget);
+    setStage('listening');
+  };
 
   // 1. Listening Complete -> Move to Pause 1 (no score shown)
   const handleListeningSubmit = (answers: Record<string, number>) => {
@@ -225,7 +232,7 @@ export const App: React.FC = () => {
     localStorage.removeItem('matalabs_user');
     setAuthToken(null);
     setAuthUser(null);
-    setStage('listening');
+    setStage('welcome');
   };
 
   // Stage progress navigation dots
@@ -256,7 +263,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Stage Progress Pills (Shown during test) */}
-            {stage !== 'preparing' && (
+            {stage !== 'preparing' && stage !== 'welcome' && (
               <div className="hidden md:flex items-center gap-2">
                 {stagePills.map((pill) => {
                   const Icon = pill.icon;
@@ -308,6 +315,14 @@ export const App: React.FC = () => {
             </div>
           ) : (
             <AnimatePresence mode="wait">
+              {stage === 'welcome' && (
+                <WelcomeView
+                  key="welcome"
+                  initialTargetScore={targetScore}
+                  onStart={handleWelcomeStart}
+                />
+              )}
+
               {stage === 'listening' && testContent && (
                 <ListeningView
                   key="listening"

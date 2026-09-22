@@ -119,7 +119,7 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 
 	wg.Wait()
 
-	// Handle AI failures gracefully per assignment instructions (do not fake 6.5)
+	// Fallback with explicit error state if evaluation service fails
 	if writingErr != nil || writingEval == nil {
 		writingEval = &models.WritingEvaluation{
 			Score:           0.0,
