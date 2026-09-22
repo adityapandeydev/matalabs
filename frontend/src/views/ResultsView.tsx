@@ -18,12 +18,13 @@ import {
 import { motion } from 'framer-motion';
 
 interface ResultsViewProps {
-  result: TestResult;
+  result: TestResult | null;
   onRetake: () => void;
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) => {
   useEffect(() => {
+    if (!result) return;
     // Launch celebratory confetti burst
     try {
       confetti({
@@ -35,9 +36,24 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
     } catch {
       // Ignore if unavailable
     }
-  }, []);
+  }, [result]);
 
-  const [currentTarget, setCurrentTarget] = React.useState<number>(result.target_score || 7.5);
+  const [currentTarget, setCurrentTarget] = React.useState<number>(result?.target_score || 7.5);
+
+  if (!result) {
+    return (
+      <div className="max-w-md mx-auto text-center py-20 space-y-4">
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">No Assessment Results Available</h2>
+        <p className="text-sm text-slate-500">Please start a new test session to complete your evaluation.</p>
+        <button
+          onClick={onRetake}
+          className="inline-flex items-center gap-2 py-2.5 px-6 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-md cursor-pointer"
+        >
+          <RotateCcw className="w-4 h-4" /> Start New Test
+        </button>
+      </div>
+    );
+  }
 
   const partScores = [
     {

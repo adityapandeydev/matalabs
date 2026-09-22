@@ -60,6 +60,7 @@ export const App: React.FC = () => {
   const [readingAnswers, setReadingAnswers] = useState<Record<string, number>>({});
   const [essayText, setEssayText] = useState('');
   const [finalResult, setFinalResult] = useState<TestResult | null>(null);
+  const [pendingAudio, setPendingAudio] = useState<Blob | null>(null);
 
   // Load Test Content from Backend
   useEffect(() => {
@@ -86,6 +87,7 @@ export const App: React.FC = () => {
   };
 
   // 3. Reading Complete -> Check Google Auth Gate
+  // 3. Reading Complete -> Strict Google Sign-In Gate
   const handleReadingSubmit = (answers: Record<string, number>) => {
     setReadingAnswers(answers);
     // If user is already authenticated with Google, advance directly to Writing!
@@ -107,6 +109,34 @@ export const App: React.FC = () => {
     localStorage.setItem('matalabs_user', JSON.stringify(authData.user));
     setCandidateName(authData.user.name);
     setCandidateContact(authData.user.email);
+
+    // If candidate had a pending submission interrupted by an expired token:
+    if (pendingAudio) {
+      setStage('preparing');
+      try {
+        const payload = {
+          target_score: targetScore,
+          candidate_name: authData.user.name,
+          candidate_contact: authData.user.email,
+          listening_answers: listeningAnswers,
+          reading_answers: readingAnswers,
+          essay_text: essayText,
+        };
+        const result = await submitFullTest(payload, pendingAudio, authData.token);
+        setFinalResult(result);
+        setPendingAudio(null);
+        setTimeout(() => {
+          setStage('results');
+        }, 1500);
+      } catch (err: unknown) {
+        console.error('Pending submission retry error:', err);
+        const msg = err instanceof Error ? err.message : 'Evaluation failed';
+        alert(`Evaluation error: ${msg}`);
+        setStage('speaking');
+      }
+      return;
+    }
+
     setStage('writing');
   };
 
@@ -133,6 +163,7 @@ export const App: React.FC = () => {
   // 8. Speaking Complete -> Transition to Preparing -> Dispatch Full AI Evaluation
   const handleSpeakingComplete = async (audioBlob: Blob) => {
     if (!authToken) {
+      setPendingAudio(audioBlob);
       setStage('auth_gate');
       return;
     }
@@ -151,22 +182,29 @@ export const App: React.FC = () => {
 
       const result = await submitFullTest(payload, audioBlob, authToken);
       setFinalResult(result);
+      setPendingAudio(null);
 
       // Short aesthetic pause on preparing results
       setTimeout(() => {
         setStage('results');
       }, 1500);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Submission evaluation error:', err);
-      // Fallback display
-      setTimeout(() => {
-        if (finalResult) {
-          setStage('results');
-        } else {
-          alert('Evaluation completed with fallback report.');
-          setStage('results');
-        }
-      }, 2000);
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If token is invalid or expired (401), automatically clear stale cache and route to Google Gate
+      if (errMsg.includes('401') || errMsg.includes('unauthorized') || errMsg.includes('session')) {
+        localStorage.removeItem('matalabs_token');
+        localStorage.removeItem('matalabs_user');
+        setAuthToken(null);
+        setAuthUser(null);
+        setPendingAudio(audioBlob);
+        setStage('auth_gate');
+        return;
+      }
+
+      alert(`Submission error: ${errMsg}. Please try again.`);
+      setStage('speaking');
     }
   };
 
@@ -176,6 +214,12 @@ export const App: React.FC = () => {
     setReadingAnswers({});
     setEssayText('');
     setFinalResult(null);
+    setPendingAudio(null);
+    // Clear stale session on retake so fresh Google authentication always occurs cleanly
+    localStorage.removeItem('matalabs_token');
+    localStorage.removeItem('matalabs_user');
+    setAuthToken(null);
+    setAuthUser(null);
     setStage('listening');
   };
 
