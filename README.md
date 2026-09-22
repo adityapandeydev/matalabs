@@ -6,9 +6,97 @@ The application evaluates candidates against standard IELTS band criteria, provi
 
 ---
 
-## Features & Assessment Flow
+## 1. System Architecture
 
-The candidate journey follows a focused, 10-step sequence designed to simulate realistic test conditions:
+```mermaid
+graph LR
+    subgraph Client ["Client (React 19 + TypeScript + Vite)"]
+        direction TB
+        UI["User Interface & Journey State Machine"]
+        AudioMod["Audio Recorder & Preview Player"]
+        GoogleAuth["Google Identity Services Client"]
+    end
+
+    subgraph Server ["Backend Server (Go + Chi Router)"]
+        direction TB
+        Router["HTTP Router & Middleware<br/>(CORS, Compression, Logging)"]
+        AuthGuard["JWT Auth Guard & Session Verifier"]
+
+        subgraph Evaluation ["Evaluation Services"]
+            Scorer["Deterministic Scorer<br/>(Listening & Reading)"]
+            AIService["Multimodal AI Service<br/>(Groq Whisper + LLM Rubrics)"]
+        end
+
+        Database[("SQLite Database<br/>(WAL Mode)")]
+    end
+
+    UI -->|Test flow & answers| Router
+    AudioMod -->|Dual audio blobs| Router
+    GoogleAuth -->|Google ID token| Router
+
+    Router --> AuthGuard
+    AuthGuard --> Scorer
+    AuthGuard --> AIService
+
+    Scorer --> Database
+    AIService --> Database
+    Database -.->|Persisted test report| Router
+```
+
+---
+
+## 2. End-to-End Candidate Journey
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Candidate (Browser)
+    participant Front as React Frontend
+    participant Back as Go Backend
+    participant Google as Google Identity Services
+    participant AI as AI Engine (Groq / Gemini)
+    participant DB as SQLite DB
+
+    Note over User,Front: Phase 1: Diagnostic Assessment (Listening & Reading)
+    User->>Front: 1. Welcome Screen: Select Target Band Score (5.0 - 9.0)
+    User->>Front: 2. Listening: Play Dialogue & Submit Answers
+    Front->>Front: Pause Screen: Section Transition
+    User->>Front: 3. Reading: Read Academic Text & Submit Answers
+
+    Note over User,Google: Phase 2: Authentication Gate
+    Front->>User: Prompt: Sign in with Google to save progress
+    User->>Google: Authenticate via Google GIS
+    Google-->>Front: Return Google Credential (JWT)
+    Front->>Back: POST /api/auth/google (Credential)
+    Back->>Google: Validate token signature & audience
+    Back->>DB: Upsert user record
+    Back-->>Front: Return session JWT & user profile
+
+    Note over User,Back: Phase 3: Authenticated Assessment (Writing & Speaking)
+    Front->>User: 4. Writing: Display Prompt with Real-Time Word Count
+    User->>Front: Complete and submit essay
+    Front->>Front: Pause Screen: Section Transition
+    User->>Front: 5. Speaking: Record 2 prompt responses & review audio
+    Front->>Back: POST /api/test/submit (Multipart: Essay, Q1 Audio, Q2 Audio, Answers) [Bearer JWT]
+
+    Note over Front,DB: Phase 4: Parallel Processing & Results
+    Front->>User: Preparing screen with progress indicator
+    par Parallel AI & Deterministic Scoring
+        Back->>AI: Transcribe Q1 & Q2 audio (Groq Whisper)
+        Back->>AI: Evaluate speaking fluency, pronunciation & vocabulary
+        Back->>AI: Evaluate essay across 4 IELTS criteria with corrections
+        Back->>Back: Deterministic scoring for Listening & Reading
+    end
+    Back->>DB: Persist comprehensive test attempt and breakdown
+    Back-->>Front: Return consolidated result payload
+    Front->>User: Display single results page with target comparison & advice
+```
+
+---
+
+## 3. Features & Assessment Flow
+
+The candidate journey follows a focused sequence designed to simulate realistic test conditions:
 
 1. **Welcome & Target Setting**: The candidate selects their target band score (5.0 to 9.0 in 0.5 increments) and reviews the structure of the 4 sections.
 2. **Listening**: Candidate listens to an audio dialogue (university study suite booking) and answers 4 comprehension questions.
@@ -28,7 +116,7 @@ The candidate journey follows a focused, 10-step sequence designed to simulate r
 
 ---
 
-## Tech Stack
+## 4. Tech Stack
 
 ### Frontend
 - **Framework**: React 19 + TypeScript (Vite)
@@ -48,7 +136,7 @@ The candidate journey follows a focused, 10-step sequence designed to simulate r
 
 ---
 
-## Project Structure
+## 5. Project Structure
 
 ```text
 ├── backend/
@@ -77,7 +165,7 @@ The candidate journey follows a focused, 10-step sequence designed to simulate r
 
 ---
 
-## Getting Started
+## 6. Getting Started
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18+) or [Bun](https://bun.sh/)
@@ -141,7 +229,7 @@ bun run dev   # or npm run dev
 
 ---
 
-## Production Deployment
+## 7. Production Deployment
 
 ### Docker (EC2 / VPS)
 The backend includes a lightweight `Dockerfile` based on Alpine Linux.
@@ -176,7 +264,7 @@ The backend includes a lightweight `Dockerfile` based on Alpine Linux.
 
 ---
 
-## API Endpoints
+## 8. API Endpoints
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
@@ -188,7 +276,7 @@ The backend includes a lightweight `Dockerfile` based on Alpine Linux.
 
 ---
 
-## Evaluation & Scoring Methodology
+## 9. Evaluation & Scoring Methodology
 
 - **Listening & Reading**: Scored deterministically against answer keys and mapped to the standard IELTS 0–9 band scale.
 - **Writing**: Analyzed across four official IELTS assessment criteria:
