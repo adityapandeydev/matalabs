@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Square, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Mic, Square, CheckCircle2, AlertCircle, RefreshCw, Volume2, Radio } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ThinkingOrb } from './ThinkingOrb';
 import { AudioPreviewPlayer } from './AudioPreviewPlayer';
@@ -22,6 +22,12 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
+  // Examiner Bot Speaking State
+  const [isExaminerSpeaking, setIsExaminerSpeaking] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const hasSpokenQ1Ref = useRef(false);
+  const hasSpokenQ2Ref = useRef(false);
+
   // Question 1 Audio
   const [q1Blob, setQ1Blob] = useState<Blob | null>(null);
   const [q1Url, setQ1Url] = useState<string | null>(null);
@@ -41,6 +47,67 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const timerRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
 
+  // Load system voices for bot question speech
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+
+    const load = () => {
+      const avail = window.speechSynthesis.getVoices();
+      if (avail.length > 0) setVoices(avail);
+    };
+
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Speak a question with natural examiner voice
+  const speakQuestion = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    const pool = enVoices.length > 0 ? enVoices : voices;
+
+    // Search for a natural examiner voice
+    const examinerVoice = pool.find((v) =>
+      /george|david|oliver|daniel|guy|samantha|victoria|karen/i.test(v.name)
+    ) || pool[0];
+
+    if (examinerVoice) utterance.voice = examinerVoice;
+    utterance.rate = 0.94;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => {
+      setIsExaminerSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      setIsExaminerSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setIsExaminerSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Stop bot speech whenever needed
+  const cancelExaminerSpeech = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsExaminerSpeaking(false);
+  };
+
   // Initialize Microphone for Check
   useEffect(() => {
     let active = true;
@@ -55,7 +122,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         mediaStreamRef.current = stream;
         setHasMicPermission(true);
 
-        // Setup Web Audio Analyser for volume indicator
         const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
         audioContextRef.current = audioCtx;
         const analyser = audioCtx.createAnalyser();
@@ -95,8 +161,36 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
+
+  // Trigger examiner speech when entering question 1
+  useEffect(() => {
+    if (phase === 'question_1' && !hasSpokenQ1Ref.current) {
+      hasSpokenQ1Ref.current = true;
+      const q1Text = questions[0] || 'Describe an interesting place in your hometown.';
+      // Short 300ms pause before examiner speaks
+      const timer = setTimeout(() => {
+        speakQuestion(q1Text);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, questions, voices]);
+
+  // Trigger examiner speech when entering question 2
+  useEffect(() => {
+    if (phase === 'question_2' && !hasSpokenQ2Ref.current) {
+      hasSpokenQ2Ref.current = true;
+      const q2Text = questions[1] || 'How do you usually relax after a demanding week?';
+      const timer = setTimeout(() => {
+        speakQuestion(q2Text);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, questions, voices]);
 
   // Recording Timer
   useEffect(() => {
@@ -119,6 +213,9 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   // Start recording for a specific question (1 or 2)
   const startQuestionRecording = (questionNum: 1 | 2) => {
     if (!mediaStreamRef.current) return;
+
+    // Stop examiner speaking if still in progress
+    cancelExaminerSpeech();
 
     try {
       currentChunksRef.current = [];
@@ -172,11 +269,15 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   };
 
   const handleFinish = () => {
+    cancelExaminerSpeech();
     const emptyBlob = new Blob([], { type: 'audio/webm' });
     const first = q1Blob || emptyBlob;
     const second = q2Blob || emptyBlob;
     onComplete(first, second);
   };
+
+  const q1Text = questions[0] || 'Describe an interesting place in your hometown.';
+  const q2Text = questions[1] || 'How do you usually relax after a demanding week?';
 
   return (
     <div className="glass-panel rounded-3xl p-6 md:p-8 max-w-2xl mx-auto shadow-lg space-y-6">
@@ -273,37 +374,74 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             </span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5">
-            <h4 className="text-base font-semibold text-slate-900 dark:text-white leading-snug">
-              {questions[0] || 'Describe an interesting place in your hometown.'}
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              Tip: Aim to speak fluently for 20–30 seconds. Discuss location, personal memories, and why visitors would appreciate it.
-            </p>
+          {/* Question Box with Audio Speaking Indicator */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="text-base font-semibold text-slate-900 dark:text-white leading-snug">
+                {q1Text}
+              </h4>
+              <button
+                type="button"
+                onClick={() => speakQuestion(q1Text)}
+                disabled={isRecording}
+                title="Replay Examiner Audio"
+                className={`p-2 rounded-xl transition-all shrink-0 cursor-pointer ${
+                  isExaminerSpeaking
+                    ? 'bg-indigo-600 text-white animate-pulse shadow-md shadow-indigo-500/20'
+                    : 'bg-slate-200/70 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                }`}
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isExaminerSpeaking ? (
+              <div className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold animate-pulse pt-1">
+                <Radio className="w-3.5 h-3.5" /> Examiner is speaking the question...
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tip: Aim to speak fluently for 20–30 seconds. Discuss location, personal memories, and why visitors would appreciate it.
+              </p>
+            )}
           </div>
 
-          {/* Orb Animation while recording */}
+          {/* Orb Animation */}
           <div className="flex flex-col items-center justify-center py-4 space-y-3">
             <ThinkingOrb
-              state={isRecording ? 'listening' : 'shaping'}
+              state={isRecording ? 'listening' : isExaminerSpeaking ? 'solving' : 'shaping'}
               size={64}
               isDark={isDark}
             />
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {isRecording ? 'Microphone Active — Recording Question 1...' : 'Click below when ready to speak'}
+              {isRecording
+                ? 'Microphone Active — Recording Question 1...'
+                : isExaminerSpeaking
+                ? 'Listen to the examiner asking the question...'
+                : 'Examiner finished — click below when ready to record'}
             </p>
           </div>
 
           <div className="flex gap-3">
             {!isRecording ? (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => startQuestionRecording(1)}
-                className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-medium flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-pink-600/20 transition-all"
-              >
-                <Mic className="w-5 h-5" /> Start Speaking Question 1
-              </motion.button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => speakQuestion(q1Text)}
+                  className="py-3.5 px-4 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Volume2 className="w-4 h-4 text-indigo-500" /> Replay
+                </button>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => startQuestionRecording(1)}
+                  className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-medium flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-pink-600/20 transition-all text-sm"
+                >
+                  <Mic className="w-5 h-5" /> Start Speaking Question 1
+                </motion.button>
+              </>
             ) : (
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -335,36 +473,73 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             </span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5">
-            <h4 className="text-base font-semibold text-slate-900 dark:text-white leading-snug">
-              {questions[1] || 'How do you usually relax after a demanding week?'}
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              Tip: Elaborate on your favorite leisure activities, how they help you decompress, and who you spend time with.
-            </p>
+          {/* Question Box with Audio Speaking Indicator */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="text-base font-semibold text-slate-900 dark:text-white leading-snug">
+                {q2Text}
+              </h4>
+              <button
+                type="button"
+                onClick={() => speakQuestion(q2Text)}
+                disabled={isRecording}
+                title="Replay Examiner Audio"
+                className={`p-2 rounded-xl transition-all shrink-0 cursor-pointer ${
+                  isExaminerSpeaking
+                    ? 'bg-indigo-600 text-white animate-pulse shadow-md shadow-indigo-500/20'
+                    : 'bg-slate-200/70 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                }`}
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isExaminerSpeaking ? (
+              <div className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold animate-pulse pt-1">
+                <Radio className="w-3.5 h-3.5" /> Examiner is speaking the question...
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tip: Elaborate on your favorite leisure activities, how they help you decompress, and who you spend time with.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col items-center justify-center py-4 space-y-3">
             <ThinkingOrb
-              state={isRecording ? 'listening' : 'shaping'}
+              state={isRecording ? 'listening' : isExaminerSpeaking ? 'solving' : 'shaping'}
               size={64}
               isDark={isDark}
             />
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {isRecording ? 'Microphone Active — Recording Question 2...' : 'Click below when ready to speak'}
+              {isRecording
+                ? 'Microphone Active — Recording Question 2...'
+                : isExaminerSpeaking
+                ? 'Listen to the examiner asking the question...'
+                : 'Examiner finished — click below when ready to record'}
             </p>
           </div>
 
           <div className="flex gap-3">
             {!isRecording ? (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => startQuestionRecording(2)}
-                className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-medium flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-pink-600/20 transition-all"
-              >
-                <Mic className="w-5 h-5" /> Start Speaking Question 2
-              </motion.button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => speakQuestion(q2Text)}
+                  className="py-3.5 px-4 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Volume2 className="w-4 h-4 text-indigo-500" /> Replay
+                </button>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => startQuestionRecording(2)}
+                  className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-medium flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-pink-600/20 transition-all text-sm"
+                >
+                  <Mic className="w-5 h-5" /> Start Speaking Question 2
+                </motion.button>
+              </>
             ) : (
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -379,7 +554,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         </motion.div>
       )}
 
-      {/* 4. Review & Confirmation Stage with Beautiful Custom Audio Players */}
+      {/* 4. Review & Confirmation Stage with Custom Audio Players */}
       {phase === 'review' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
@@ -404,8 +579,9 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <AudioPreviewPlayer
                 src={q1Url}
                 initialDuration={q1Duration}
-                label={`Q1: ${questions[0] || 'Hometown Description'}`}
+                label={`Q1: ${q1Text}`}
                 onRetake={() => {
+                  hasSpokenQ1Ref.current = false;
                   setPhase('question_1');
                   setQ1Blob(null);
                   setQ1Url(null);
@@ -417,8 +593,9 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <AudioPreviewPlayer
                 src={q2Url}
                 initialDuration={q2Duration}
-                label={`Q2: ${questions[1] || 'Weekend Relaxation'}`}
+                label={`Q2: ${q2Text}`}
                 onRetake={() => {
+                  hasSpokenQ2Ref.current = false;
                   setPhase('question_2');
                   setQ2Blob(null);
                   setQ2Url(null);
@@ -430,6 +607,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           <div className="flex gap-3 pt-2">
             <button
               onClick={() => {
+                hasSpokenQ1Ref.current = false;
+                hasSpokenQ2Ref.current = false;
                 setPhase('question_1');
                 setQ1Blob(null);
                 setQ1Url(null);

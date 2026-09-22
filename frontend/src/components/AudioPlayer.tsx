@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Pause, RotateCcw, Volume2, UserCheck } from 'lucide-react';
+import { Volume2, UserCheck, CheckCircle2, Radio } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface AudioPlayerProps {
-  audioUrl?: string;
   transcriptText: string;
+  autoPlay?: boolean;
+  onPlaybackComplete?: () => void;
 }
 
 interface DialogueTurn {
@@ -12,15 +13,24 @@ interface DialogueTurn {
   text: string;
 }
 
-export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
+export const AudioPlayer: React.FC<AudioPlayerProps> = ({
+  transcriptText,
+  autoPlay = false,
+  onPlaybackComplete,
+}) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentSpeaker, setCurrentSpeaker] = useState<'Receptionist' | 'Student' | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   const isPlayingRef = useRef(false);
   const currentTurnIndexRef = useRef(0);
-  const totalDuration = 42; // simulated seconds for waveform timer
+  const hasStartedRef = useRef(false);
+  const onCompleteRef = useRef(onPlaybackComplete);
+  onCompleteRef.current = onPlaybackComplete;
+
+  const totalDuration = 42; // simulated seconds for dialogue progression
 
   // Parse conversation turns from dialogue
   const dialogueTurns: DialogueTurn[] = useMemo(() => {
@@ -68,7 +78,6 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
     const enVoices = voices.filter((v) => v.lang.startsWith('en'));
     const pool = enVoices.length > 0 ? enVoices : voices;
 
-    // Search for female / male profiles in voice names
     const femaleVoice = pool.find((v) =>
       /female|zira|samantha|victoria|karen|jenny|moira|fiona/i.test(v.name)
     );
@@ -88,44 +97,52 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
     if (index >= dialogueTurns.length) {
       isPlayingRef.current = false;
       setIsPlaying(false);
+      setIsCompleted(true);
       setProgress(100);
       setCurrentSpeaker(null);
-      currentTurnIndexRef.current = 0;
+      if (onCompleteRef.current) {
+        onCompleteRef.current();
+      }
       return;
     }
 
     currentTurnIndexRef.current = index;
     const turn = dialogueTurns[index];
     setCurrentSpeaker(turn.speaker);
-    setProgress(Math.round((index / dialogueTurns.length) * 100));
+    setProgress(Math.round(((index + 1) / dialogueTurns.length) * 100));
 
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window)) {
+      // Fallback timer if speech synthesis is disabled in environment
+      setTimeout(() => {
+        if (isPlayingRef.current) playTurn(index + 1);
+      }, 2500);
+      return;
+    }
 
     const utterance = new SpeechSynthesisUtterance(turn.text);
 
     if (turn.speaker === 'Receptionist') {
       if (receptionistVoice) utterance.voice = receptionistVoice;
-      utterance.pitch = 1.18; // distinctly higher natural pitch
+      utterance.pitch = 1.15;
       utterance.rate = 0.95;
     } else {
       if (studentVoice) utterance.voice = studentVoice;
-      utterance.pitch = 0.86; // distinctly deeper natural pitch
-      utterance.rate = 1.02;
+      utterance.pitch = 0.88;
+      utterance.rate = 1.0;
     }
 
     utterance.onend = () => {
       if (isPlayingRef.current) {
-        // Short natural breathing pause between turns (350ms)
         setTimeout(() => {
           if (isPlayingRef.current) {
             playTurn(index + 1);
           }
-        }, 350);
+        }, 400);
       }
     };
 
     utterance.onerror = (e) => {
-      console.warn('Speech utterance ended/errored:', e);
+      console.warn('Speech utterance event:', e);
       if (isPlayingRef.current) {
         playTurn(index + 1);
       }
@@ -134,37 +151,20 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
     window.speechSynthesis.speak(utterance);
   };
 
-  const handlePlayToggle = () => {
-    if (isPlaying) {
-      // Pause
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    } else {
-      // Play
+  // Auto-play when trigger becomes active
+  useEffect(() => {
+    if (autoPlay && !hasStartedRef.current && dialogueTurns.length > 0) {
+      hasStartedRef.current = true;
       isPlayingRef.current = true;
       setIsPlaying(true);
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
-      playTurn(currentTurnIndexRef.current);
+      playTurn(0);
     }
-  };
+  }, [autoPlay, dialogueTurns]);
 
-  const handleRestart = () => {
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    currentTurnIndexRef.current = 0;
-    setProgress(0);
-    setCurrentSpeaker(null);
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-  };
-
-  const currentSeconds = Math.floor((progress / 100) * totalDuration);
+  const currentSeconds = Math.min(totalDuration, Math.floor((progress / 100) * totalDuration));
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -173,17 +173,41 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
 
   return (
     <div className="glass-panel rounded-2xl p-5 shadow-sm border border-slate-200/60 dark:border-white/10 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
-            <Volume2 className="w-4 h-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+              isPlaying
+                ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 ring-2 ring-cyan-500/30 animate-pulse'
+                : isCompleted
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                : 'bg-slate-200/60 dark:bg-slate-800 text-slate-400'
+            }`}
+          >
+            {isPlaying ? (
+              <Radio className="w-5 h-5 animate-spin-slow" />
+            ) : isCompleted ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : (
+              <Volume2 className="w-5 h-5" />
+            )}
           </div>
+
           <div>
-            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Audio Recording: University Study Suites
-            </h4>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                Audio Recording: University Study Suites
+              </h4>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/5">
+                Plays Once Only
+              </span>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Listen carefully to the two speakers (Receptionist & Student) to answer the questions below.
+              {isPlaying
+                ? 'Listen carefully and note down details. Questions unlock once audio concludes.'
+                : isCompleted
+                ? 'Recording has finished. You may now review and answer the questions below.'
+                : 'Waiting for transition timer to start playback...'}
             </p>
           </div>
         </div>
@@ -191,7 +215,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
         {/* Current Speaker Indicator Badge */}
         {currentSpeaker && isPlaying && (
           <div
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold animate-pulse transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold shrink-0 animate-pulse transition-colors ${
               currentSpeaker === 'Receptionist'
                 ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
                 : 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
@@ -201,35 +225,25 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ transcriptText }) => {
             <span>Speaking: {currentSpeaker}</span>
           </div>
         )}
+
+        {isCompleted && (
+          <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Audio Complete
+          </span>
+        )}
       </div>
 
-      {/* Waveform & Playback Controls */}
+      {/* Live Waveform Bar & Progress (Non-interactive / Cannot be paused or scrubbed) */}
       <div className="flex items-center gap-4 pt-1">
-        <motion.button
-          whileTap={{ scale: 0.94 }}
-          onClick={handlePlayToggle}
-          className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 cursor-pointer transition-colors shrink-0"
-          aria-label={isPlaying ? 'Pause dialogue' : 'Play dialogue'}
-        >
-          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-        </motion.button>
-
-        <button
-          onClick={handleRestart}
-          title="Restart Audio"
-          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-
-        {/* Dynamic Simulated Waveform Bars */}
-        <div className="flex-1 flex items-center gap-1 h-8 px-2 overflow-hidden">
-          {Array.from({ length: 32 }).map((_, i) => {
-            const barProgress = (i / 32) * 100;
+        <div className="flex-1 flex items-center gap-1 h-8 px-2 overflow-hidden bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/50 dark:border-white/5">
+          {Array.from({ length: 36 }).map((_, i) => {
+            const barProgress = (i / 36) * 100;
             const isPassed = barProgress <= progress;
             const activeHeight = isPlaying
-              ? Math.sin(i * 0.7 + progress * 0.2) * 14 + 16
-              : 8 + (i % 5) * 3;
+              ? Math.sin(i * 0.7 + progress * 0.25) * 12 + 14
+              : isCompleted
+              ? 6
+              : 8 + (i % 4) * 2;
 
             return (
               <motion.div
