@@ -240,14 +240,36 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              Model: {result.writing_details.ai_model_used || 'Gemini Flash'}
+            <span
+              className={`text-xs font-mono px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+                result.writing_details.evaluation_error
+                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+              }`}
+            >
+              {result.writing_details.evaluation_error ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              )}
+              AI: {result.writing_details.ai_model_used || 'Gemini 3.5 Flash'}
             </span>
             <span className="text-sm font-extrabold font-mono px-3 py-1 rounded-xl bg-amber-500 text-white font-tabular">
               Band {result.writing_score.toFixed(1)}
             </span>
           </div>
         </div>
+
+        {/* Warning if AI failed */}
+        {result.writing_details.evaluation_error && (
+          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Evaluation Notice: </span>
+              {result.writing_details.evaluation_error}
+            </div>
+          </div>
+        )}
 
         {/* Criteria Feedback Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -437,14 +459,36 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onRetake }) =>
                 Pace: ~{result.speaking_details.words_per_minute} WPM
               </span>
             )}
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              Model: {result.speaking_details.ai_model_used || 'Gemini Audio / Whisper'}
+            <span
+              className={`text-xs font-mono px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+                result.speaking_details.evaluation_error
+                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+              }`}
+            >
+              {result.speaking_details.evaluation_error ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              )}
+              AI: {result.speaking_details.ai_model_used || 'Gemini Audio / Whisper'}
             </span>
             <span className="text-sm font-extrabold font-mono px-3 py-1 rounded-xl bg-pink-500 text-white font-tabular">
               Band {result.speaking_score.toFixed(1)}
             </span>
           </div>
         </div>
+
+        {/* Warning if AI speaking failed */}
+        {result.speaking_details.evaluation_error && (
+          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Evaluation Notice: </span>
+              {result.speaking_details.evaluation_error}
+            </div>
+          </div>
+        )}
 
         {/* Speech Transcript */}
         <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/5 space-y-2">
