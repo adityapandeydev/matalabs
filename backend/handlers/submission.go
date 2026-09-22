@@ -137,6 +137,10 @@ func (h *SubmissionHandler) EvaluateAndSubmitHandler(w http.ResponseWriter, r *h
 		}
 	}
 
+	// Double-check sanitization to filter phantom mistakes and extraneous quotes
+	ai.SanitizeWritingEvaluation(writingEval)
+	ai.SanitizeSpeakingEvaluation(speakingEval)
+
 	// 3. Compute Overall Score: Average of the real 4 parts to 1 decimal place
 	scores := []float64{listeningScore, readingScore, writingEval.Score, speakingEval.Score}
 	total := 0.0

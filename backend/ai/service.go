@@ -56,6 +56,74 @@ func CleanJSON(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// CleanQuoteWrapper strips leading and trailing quotes, double quotes, smart quotes, backticks, and whitespace
+func CleanQuoteWrapper(s string) string {
+	s = strings.TrimSpace(s)
+	for len(s) > 1 && (s[0] == '"' || s[0] == '\'' || s[0] == '`' || strings.HasPrefix(s, "“") || strings.HasPrefix(s, "‘")) {
+		s = strings.Trim(s, "\"`'“”‘’")
+		s = strings.TrimSpace(s)
+	}
+	return s
+}
+
+// NormalizeForComparison normalizes strings to detect phantom mistakes
+func NormalizeForComparison(s string) string {
+	s = CleanQuoteWrapper(s)
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "-", " ")
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.Trim(s, ".,;:!?\"'`")
+	fields := strings.Fields(s)
+	return strings.Join(fields, " ")
+}
+
+// SanitizeWritingEvaluation strips extraneous quotes and filters phantom mistakes where original == correction
+func SanitizeWritingEvaluation(eval *models.WritingEvaluation) {
+	if eval == nil {
+		return
+	}
+	var validMistakes []models.WritingMistake
+	for _, m := range eval.Mistakes {
+		orig := CleanQuoteWrapper(m.Original)
+		corr := CleanQuoteWrapper(m.Correction)
+		if orig == "" || corr == "" {
+			continue
+		}
+		// If original and correction are identical or trivial hyphen/space variations, drop it!
+		if NormalizeForComparison(orig) == NormalizeForComparison(corr) {
+			log.Printf("[AI] Dropping phantom mistake: original %q == correction %q", orig, corr)
+			continue
+		}
+		m.Original = orig
+		m.Correction = corr
+		m.Explanation = CleanQuoteWrapper(m.Explanation)
+		validMistakes = append(validMistakes, m)
+	}
+	eval.Mistakes = validMistakes
+
+	for i := range eval.WellFormedSentences {
+		eval.WellFormedSentences[i] = CleanQuoteWrapper(eval.WellFormedSentences[i])
+	}
+	for i := range eval.WordFeedback {
+		eval.WordFeedback[i].Word = CleanQuoteWrapper(eval.WordFeedback[i].Word)
+		for j := range eval.WordFeedback[i].Alternatives {
+			eval.WordFeedback[i].Alternatives[j] = CleanQuoteWrapper(eval.WordFeedback[i].Alternatives[j])
+		}
+	}
+}
+
+// SanitizeSpeakingEvaluation strips extraneous quotes from spoken feedback items
+func SanitizeSpeakingEvaluation(eval *models.SpeakingEvaluation) {
+	if eval == nil {
+		return
+	}
+	for i := range eval.SpokenFeedback {
+		eval.SpokenFeedback[i].Phrase = CleanQuoteWrapper(eval.SpokenFeedback[i].Phrase)
+		eval.SpokenFeedback[i].Quote = CleanQuoteWrapper(eval.SpokenFeedback[i].Quote)
+		eval.SpokenFeedback[i].Suggestion = CleanQuoteWrapper(eval.SpokenFeedback[i].Suggestion)
+	}
+}
+
 // EvaluateWriting scores the candidate's essay
 func (s *AIService) EvaluateWriting(promptText, essay string) (*models.WritingEvaluation, error) {
 	words := strings.Fields(strings.TrimSpace(essay))
@@ -136,6 +204,15 @@ Evaluate the following essay against the four standard criteria:
 
 The score MUST be between 0.0 and 9.0 in half steps ONLY (e.g. 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0).
 Calculate an individual score for each criterion, and the overall score as their average rounded to the nearest half step.
+
+CRITICAL INSTRUCTIONS FOR MISTAKES & CORRECTIONS:
+- Only flag REAL grammatical, spelling, punctuation, or word choice errors.
+- "original" MUST be the exact flawed excerpt from the candidate's essay.
+- "correction" MUST be the corrected phrase, and MUST BE DIFFERENT from "original".
+- NEVER output a mistake where "original" and "correction" are identical, or differ only by minor stylistic preferences or hyphens.
+- If the essay has clean grammar and no genuine errors, return an empty array [] for "mistakes". Do NOT invent fake errors.
+- DO NOT wrap strings in extra quotation marks inside the JSON values (e.g. use "code generation tools", not "\"code generation tools\"").
+
 Return ONLY a valid JSON object matching this schema exactly:
 {
   "score": number,
@@ -149,7 +226,7 @@ Return ONLY a valid JSON object matching this schema exactly:
   "grammar_notes": "string",
   "mistakes": [
     {
-      "original": "exact erroneous phrase from essay",
+      "original": "exact erroneous phrase from essay (must differ from correction)",
       "correction": "corrected phrasing",
       "explanation": "why this is incorrect and the grammar rule applied",
       "category": "grammar" | "spelling" | "vocabulary" | "cohesion"
@@ -162,7 +239,7 @@ Return ONLY a valid JSON object matching this schema exactly:
       "alternatives": ["alternative 1", "alternative 2"]
     }
   ],
-  "well_formed_sentences": ["exact well-crafted sentence from essay", "another effective sentence"],
+  "well_formed_sentences": ["exact well-crafted sentence from essay"],
   "strengths": ["string", "string"],
   "tips_to_improve": ["actionable advice to improve writing flow and structure"]
 }`
@@ -187,6 +264,7 @@ Return ONLY a valid JSON object matching this schema exactly:
 				eval.GrammarScore = eval.Score
 			}
 			eval.AIModelUsed = "groq/gpt-oss-120b"
+			SanitizeWritingEvaluation(eval)
 			return eval, nil
 		}
 		log.Printf("[AI] Groq writing error: %v. Trying Gemini fallback...", err)
@@ -210,6 +288,7 @@ Return ONLY a valid JSON object matching this schema exactly:
 				eval.GrammarScore = eval.Score
 			}
 			eval.AIModelUsed = "gemini-3.6-flash"
+			SanitizeWritingEvaluation(eval)
 			return eval, nil
 		}
 		log.Printf("[AI] Gemini writing error: %v", err)
@@ -590,6 +669,7 @@ Return ONLY a valid JSON object matching this schema:
 		eval.PronunciationScore = eval.Score
 	}
 
+	SanitizeSpeakingEvaluation(&eval)
 	return &eval, nil
 }
 
@@ -742,5 +822,6 @@ Return ONLY valid JSON matching this schema:
 		eval.PronunciationScore = eval.Score
 	}
 
+	SanitizeSpeakingEvaluation(&eval)
 	return &eval, nil
 }

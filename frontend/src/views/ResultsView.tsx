@@ -24,6 +24,19 @@ interface ResultsViewProps {
   onRetake: () => void;
 }
 
+const stripQuotes = (str?: string): string => {
+  if (!str) return '';
+  return str.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
+};
+
+const normalizePhrase = (str: string): string => {
+  return stripQuotes(str)
+    .toLowerCase()
+    .replace(/[-_\s]+/g, ' ')
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+    .trim();
+};
+
 export const ResultsView: React.FC<ResultsViewProps> = ({
   result,
   speakingQuestions,
@@ -375,14 +388,14 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold font-mono">"{h.word}"</span>
+                    <span className="font-bold font-mono">{stripQuotes(h.word)}</span>
                     <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-white/60 dark:bg-black/20">
                       {h.type === 'effective' ? 'Effective Choice' : 'Consider Alternatives'}
                     </span>
                   </div>
                   {h.alternatives && h.alternatives.length > 0 && (
                     <div className="text-[11px] opacity-90">
-                      Alternative options: <span className="font-medium">{h.alternatives.join(', ')}</span>
+                      Alternative options: <span className="font-medium">{h.alternatives.map(stripQuotes).join(', ')}</span>
                     </div>
                   )}
                 </div>
@@ -401,45 +414,56 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             <div className="space-y-1.5">
               {(result.writing_details.well_formed_sentences || result.writing_details.strong_excerpts)!.map((excerpt, idx) => (
                 <div key={idx} className="text-xs italic text-slate-700 dark:text-slate-300 font-serif pl-3 border-l-2 border-indigo-500">
-                  "{excerpt}"
+                  "{stripQuotes(excerpt)}"
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Identified Mistakes & Grammar Errors */}
-        {result.writing_details.mistakes && result.writing_details.mistakes.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-              <XCircle className="w-3.5 h-3.5" /> Specific Mistakes & Grammar Notes
-            </h4>
-            <div className="space-y-2">
-              {result.writing_details.mistakes.map((m, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20 text-xs space-y-1.5"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="line-through text-rose-600 dark:text-rose-400 font-mono">
-                      "{m.original}"
-                    </span>
-                    <span className="text-slate-400">&rarr;</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
-                      "{m.correction}"
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 uppercase">
-                      {m.category}
-                    </span>
+        {/* Identified Mistakes & Grammar Errors (filter out phantom identical entries) */}
+        {(() => {
+          const validMistakes = (result.writing_details.mistakes || []).filter((m) => {
+            const orig = stripQuotes(m.original);
+            const corr = stripQuotes(m.correction);
+            if (!orig || !corr) return false;
+            return normalizePhrase(orig) !== normalizePhrase(corr);
+          });
+
+          if (validMistakes.length === 0) return null;
+
+          return (
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5" /> Specific Mistakes & Grammar Notes
+              </h4>
+              <div className="space-y-2">
+                {validMistakes.map((m, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20 text-xs space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="line-through text-rose-600 dark:text-rose-400 font-mono bg-rose-500/10 dark:bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/20">
+                        {stripQuotes(m.original)}
+                      </span>
+                      <span className="text-slate-400 font-bold">&rarr;</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20">
+                        {stripQuotes(m.correction)}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 uppercase">
+                        {m.category}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-400 leading-normal">
+                      {stripQuotes(m.explanation)}
+                    </p>
                   </div>
-                  <p className="text-slate-600 dark:text-slate-400 leading-normal">
-                    {m.explanation}
-                  </p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Improvement Tips */}
         {result.writing_details.tips_to_improve && result.writing_details.tips_to_improve.length > 0 && (
@@ -617,10 +641,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                   className="p-3 rounded-xl bg-pink-500/5 dark:bg-pink-500/10 border border-pink-500/20 text-xs space-y-1"
                 >
                   <div className="italic text-slate-800 dark:text-slate-200 font-serif">
-                    "{q.phrase || q.quote}"
+                    "{stripQuotes(q.phrase || q.quote)}"
                   </div>
                   <div className="text-pink-700 dark:text-pink-300 font-medium text-[11px]">
-                    Delivery tip: {q.suggestion}
+                    Delivery tip: {stripQuotes(q.suggestion)}
                   </div>
                 </div>
               ))}
